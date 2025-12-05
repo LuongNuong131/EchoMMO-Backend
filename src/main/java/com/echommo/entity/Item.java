@@ -13,18 +13,14 @@ public class Item {
     @Column(name = "item_id")
     private Integer itemId;
 
-    // --- CHỦ SỞ HỮU (Inventory) ---
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "user_id")
+    private User user; // Null nếu là đồ hệ thống
 
     private String name;
     private String description;
-
-    @Column(nullable = false)
-    private String type; // WEAPON, ARMOR, HELMET, CONSUMABLE...
-
-    private String rarity; // C, B, A, S, SR
+    private String type;
+    private String rarity;
 
     @Column(name = "base_price")
     private BigDecimal basePrice;
@@ -38,8 +34,7 @@ public class Item {
     @Column(name = "is_equipped")
     private Boolean isEquipped = false;
 
-    // --- CHỈ SỐ BONUS (FIXED ORDER) ---
-
+    // Stats Bonus
     @Column(name = "atk_bonus")
     private Integer atkBonus = 0;
 
@@ -49,7 +44,6 @@ public class Item {
     @Column(name = "hp_bonus")
     private Integer hpBonus = 0;
 
-    // [FIX] Chỉ số Energy Bonus (đã thêm)
     @Column(name = "energy_bonus")
     private Integer energyBonus = 0;
 
