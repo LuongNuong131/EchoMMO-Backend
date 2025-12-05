@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Entity
@@ -34,7 +35,7 @@ public class User {
     @Column(name = "is_active")
     private Boolean isActive = true;
 
-    // --- BAN INFO (MỚI) ---
+    // --- BAN INFO ---
     @Column(name = "ban_reason")
     private String banReason;
 
@@ -70,4 +71,8 @@ public class User {
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private Wallet wallet;
+
+    // --- [MỚI] LIÊN KẾT CHARACTER STATS ---
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private Character character;
 }

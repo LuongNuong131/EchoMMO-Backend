@@ -11,6 +11,6 @@ public interface CharacterRepository extends JpaRepository<Character, Integer> {
     Optional<Character> findByUser_UserId(Integer userId);
     Boolean existsByName(String name);
 
-    // Lấy Top 10 người cấp cao nhất, nếu cùng cấp thì so Exp
-    List<Character> findTop10ByOrderByLevelDescCurrentExpDesc();
+    // [FIX] Lấy Top 10 người cấp cao nhất, ưu tiên Lv giảm dần, sau đó Exp giảm dần.
+    List<Character> findTop10ByOrderByLvDescExpDesc();
 }

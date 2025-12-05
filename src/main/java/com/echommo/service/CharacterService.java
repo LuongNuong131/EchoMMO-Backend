@@ -30,9 +30,18 @@ public class CharacterService {
         if(charRepo.existsByName(req.getName())) throw new RuntimeException("Taken");
 
         Character c = new Character();
-        c.setUser(u); c.setName(req.getName());
-        c.setLevel(1); c.setHp(100); c.setMaxHp(100); c.setEnergy(50); c.setMaxEnergy(50);
-        c.setAtk(10); c.setDef(5); c.setSpeed(10); c.setCritRate(5); c.setCritDmg(150);
+        c.setUser(u);
+        c.setName(req.getName());
+
+        // FIX: Sửa lỗi Setter - Dùng setLv, setBaseAtk, setBaseDef, v.v.
+        c.setLv(1);
+        c.setHp(100); c.setMaxHp(100);
+        c.setEnergy(50); c.setMaxEnergy(50);
+        c.setBaseAtk(10); c.setBaseDef(5);
+        c.setBaseSpeed(10);
+        c.setBaseCritRate(5);
+        c.setBaseCritDmg(150);
+
         c = charRepo.save(c);
 
         for(String n : Arrays.asList("Kiếm Gỗ Tập Luyện", "Áo Vải Thô", "Bình Máu Nhỏ")) {

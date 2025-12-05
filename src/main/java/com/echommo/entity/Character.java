@@ -3,7 +3,6 @@ package com.echommo.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
-import java.time.LocalDateTime;
 
 @Data
 @Entity
@@ -11,48 +10,56 @@ import java.time.LocalDateTime;
 public class Character {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "character_id")
-    private Integer characterId;
+    @Column(name = "char_id")
+    private Integer charId;
 
+    @Column(unique = true, nullable = false) // <--- Thêm trường Name
+    private String name;
+
+    // Liên kết 1-1 với User
     @OneToOne
     @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnore
     private User user;
 
-    @Column(nullable = false)
-    private String name;
-
-    private Integer level = 1;
+    // --- Cấp độ & Kinh nghiệm ---
+    @Column(name = "level")
+    private Integer lv = 1; // Sẽ dùng setLv/getLv
 
     @Column(name = "current_exp")
-    private Long currentExp = 0L;
+    private Integer exp = 0;
 
-    // --- BASE STATS ---
-    private Integer hp = 100;
+    // --- Chỉ số Chiến đấu (Base Stats) ---
+    @Column(name = "base_atk")
+    private Integer baseAtk = 10;
 
+    @Column(name = "base_def")
+    private Integer baseDef = 5;
+
+    @Column(name = "base_speed")
+    private Integer baseSpeed = 10;
+
+    // [FIX] Thêm chỉ số Crit Rate/Dmg
+    @Column(name = "base_crit_rate")
+    private Integer baseCritRate = 0;
+
+    @Column(name = "base_crit_dmg")
+    private Integer baseCritDmg = 150;
+
+    // --- HP & Energy (Chân Khí) ---
     @Column(name = "max_hp")
     private Integer maxHp = 100;
 
-    private Integer atk = 10;
-    private Integer def = 5;
-
-    // LƯU Ý: Tên biến là 'speed', method setter sẽ là 'setSpeed'
-    private Integer speed = 10;
-
-    @Column(name = "crit_rate")
-    private Integer critRate = 5; // 5%
-
-    @Column(name = "crit_dmg")
-    private Integer critDmg = 150; // 150%
-
-    private Integer energy = 50;
+    @Column(name = "current_hp")
+    private Integer hp = 100;
 
     @Column(name = "max_energy")
     private Integer maxEnergy = 50;
 
-    @Column(name = "stat_points")
-    private Integer statPoints = 0;
+    @Column(name = "current_energy")
+    private Integer energy = 50;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt = LocalDateTime.now();
+    // --- Cấu hình Khám phá ---
+    @Column(name = "current_location")
+    private String currentLocation = "Sảnh Chính";
 }

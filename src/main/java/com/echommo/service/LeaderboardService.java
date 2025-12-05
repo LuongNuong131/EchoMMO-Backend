@@ -22,16 +22,20 @@ public class LeaderboardService {
 
     // BXH Cấp Độ
     public List<LeaderboardEntry> getLevelLeaderboard() {
-        List<Character> chars = characterRepository.findTop10ByOrderByLevelDescCurrentExpDesc();
+        // Giả định phương thức này đã được khai báo trong CharacterRepository
+        List<Character> chars = characterRepository.findTop10ByOrderByLvDescExpDesc();
         List<LeaderboardEntry> result = new ArrayList<>();
 
         for (int i = 0; i < chars.size(); i++) {
             Character c = chars.get(i);
+            // FIX: Sử dụng c.getLv() thay vì getLevel()
+            String name = c.getName() != null ? c.getName() : c.getUser().getUsername();
+
             result.add(new LeaderboardEntry(
-                    c.getName(),
-                    "Lv. " + c.getLevel(),
+                    name,
+                    "Cấp " + c.getLv(),
                     "#" + (i + 1),
-                    c.getName().substring(0, 1).toUpperCase()
+                    name.substring(0, 1).toUpperCase()
             ));
         }
         return result;
@@ -39,20 +43,22 @@ public class LeaderboardService {
 
     // BXH Đại Gia (Vàng)
     public List<LeaderboardEntry> getWealthLeaderboard() {
+        // Giả định phương thức này đã được khai báo trong WalletRepository
         List<Wallet> wallets = walletRepository.findTop10ByOrderByGoldDesc();
         List<LeaderboardEntry> result = new ArrayList<>();
 
         for (int i = 0; i < wallets.size(); i++) {
             Wallet w = wallets.get(i);
-            // Lấy tên từ User, nếu chưa tạo Char thì lấy Username
+
+            // Lấy tên từ User
             String name = w.getUser().getUsername();
 
-            // Logic tìm tên nhân vật (hơi thủ công chút do quan hệ DB)
-            // Ở đây t dùng tạm Username cho nhanh, vì Wallet đi theo User
+            // Sử dụng longValue() để đảm bảo chuyển đổi từ BigDecimal
+            String goldString = w.getGold().longValue() + " 🟡";
 
             result.add(new LeaderboardEntry(
                     name,
-                    w.getGold().intValue() + " 🟡",
+                    goldString,
                     "#" + (i + 1),
                     name.substring(0, 1).toUpperCase()
             ));
