@@ -22,11 +22,9 @@ public class ExplorationService {
     @Autowired private WalletRepository walletRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private CaptchaService captchaService;
+    @Autowired private QuestService questService;
 
     private final Random random = new Random();
-
-    // Hằng số tính EXP Level Up (Đồng bộ với GameService)
-    private static final long BASE_EXP_REQUIREMENT = 100L;
 
     @Transactional
     public ExplorationResponse explore() {
@@ -38,24 +36,25 @@ public class ExplorationService {
         if (Boolean.TRUE.equals(user.getIsCaptchaLocked())) {
             throw new RuntimeException("CAPTCHA");
         }
-        if (random.nextInt(100) < 1) { // 1% dính Captcha
+        if (random.nextInt(100) < 1) { // 1% tỷ lệ dính captcha
             user.setIsCaptchaLocked(true);
             userRepository.save(user);
             throw new RuntimeException("CAPTCHA");
         }
 
-        // 2. Trừ Energy (Fixed Flow)
-        // FIX 4: Nếu Energy bằng 0, cho nghỉ ngơi (+1 Energy)
-        if (character.getEnergy() == 0) {
+        // 2. Trừ Energy
+        if (character.getEnergy() < 1) {
+            // Auto rest nếu hết energy (Optional feature)
             character.setEnergy(1);
             characterRepository.save(character);
-            // LƯU Ý: Frontend cần được cập nhật để xử lý Response này
-            return new ExplorationResponse("Bạn nghỉ ngơi một chút... (+1 ⚡)", "REST", BigDecimal.ZERO, character.getExp(), character.getLv(), character.getEnergy(), character.getMaxEnergy(), null);
+            return new ExplorationResponse("Bạn nghỉ mệt một chút... (+1 ⚡)", "REST", BigDecimal.ZERO, character.getExp(), character.getLv(), character.getEnergy(), character.getMaxEnergy(), null);
         }
-        // Trừ 1 Energy cho hành động khám phá
         character.setEnergy(character.getEnergy() - 1);
 
-        // 3. RNG Logic
+        // Quest Progress
+        questService.updateProgress(user, "EXPLORE", 1);
+
+        // 3. RNG Event
         int roll = random.nextInt(100);
         String message;
         String type;
@@ -64,53 +63,40 @@ public class ExplorationService {
         Integer newLevel = null;
         Wallet wallet = user.getWallet();
 
-        if (roll < 15) {
-            // 15% Gặp Quái
-            type = "ENEMY";
-            message = "Có tiếng động lạ trong bụi cỏ!";
-            expGain = 0L; // Gặp quái chưa có exp
-        } else if (roll < 45) {
-            // 30% Nhặt Vàng
+        if (roll < 40) {
+            // 40% Nothing
+            type = "NOTHING";
+            String[] msgs = {"Khu rừng yên tĩnh...", "Chỉ có tiếng gió vi vu.", "Không phát hiện gì cả."};
+            message = msgs[random.nextInt(msgs.length)];
+        } else if (roll < 70) {
+            // 30% Gold
             type = "GOLD";
-            int amount = 10 + random.nextInt(20);
-            gold = new BigDecimal(amount);
-            message = "Bạn nhặt được " + amount + " vàng rơi trên đường.";
-        } else if (roll < 55) {
-            // 10% Sự kiện lạ
-            type = "EVENT";
-            String[] events = {"Bạn thấy một đám mây hình con vịt.", "Gió thổi mát quá.", "Bạn vấp phải cục đá."};
-            message = events[random.nextInt(events.length)];
-        } else {
-            // Đi bộ bình thường
-            type = "WALK";
-            message = "Bạn bước đi trên con đường mòn...";
-        }
+            int amount = 10 + random.nextInt(21); // 10-30 gold
+            gold = BigDecimal.valueOf(amount);
+            message = "Bạn tìm thấy " + amount + " vàng rơi trên đường!";
 
-        // 4. Cộng thưởng và Level Up
-        if (gold.compareTo(BigDecimal.ZERO) > 0) {
             wallet.setGold(wallet.getGold().add(gold));
             walletRepository.save(wallet);
+        } else {
+            // 30% Enemy
+            type = "ENEMY";
+            message = "Có sát khí! Quái vật xuất hiện!";
+            expGain = 0L; // Gặp quái chưa có exp ngay
         }
 
+        // Cộng EXP đi dạo
         if (expGain > 0) {
-            // FIX 1 & 3: Sử dụng getExp/setExp và tính toán EXP
             character.setExp(character.getExp() + expGain.intValue());
 
-            // Tính EXP yêu cầu cho Level hiện tại
-            long requiredExp = BASE_EXP_REQUIREMENT * (long) Math.pow(character.getLv(), 2);
-
-            if (character.getExp() >= requiredExp) {
-                // FIX 1 & 2: Dùng setLv/getLv và setBaseAtk (hoặc setAtk nếu Entity không dùng Base)
-                character.setExp(character.getExp() - (int) requiredExp);
+            // Level Up Check
+            long reqExp = 100L * (long)Math.pow(character.getLv(), 2);
+            if (character.getExp() >= reqExp) {
+                character.setExp(character.getExp() - (int)reqExp);
                 character.setLv(character.getLv() + 1);
-
-                // Tăng chỉ số cơ bản khi lên cấp (Dùng setBaseAtk/setBaseDef)
-                character.setBaseAtk(character.getBaseAtk() + 5);
-                character.setBaseDef(character.getBaseDef() + 2);
-
-                character.setMaxHp(character.getMaxHp() + 50);
+                character.setMaxHp(character.getMaxHp() + 20);
                 character.setHp(character.getMaxHp());
-                character.setEnergy(character.getMaxEnergy());
+                character.setBaseAtk(character.getBaseAtk() + 2);
+                character.setBaseDef(character.getBaseDef() + 1);
 
                 newLevel = character.getLv();
                 message += " [LÊN CẤP!]";
@@ -119,7 +105,11 @@ public class ExplorationService {
 
         characterRepository.save(character);
 
-        // FIX 5: Trả về EXP và Level hiện tại
-        return new ExplorationResponse(message, type, gold, character.getExp(), character.getLv(), character.getEnergy(), character.getMaxEnergy(), newLevel);
+        return new ExplorationResponse(
+                message, type, gold,
+                character.getExp(), character.getLv(),
+                character.getEnergy(), character.getMaxEnergy(),
+                newLevel
+        );
     }
 }
