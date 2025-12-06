@@ -5,6 +5,7 @@ import com.echommo.entity.*;
 import com.echommo.entity.Character;
 import com.echommo.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -28,6 +29,14 @@ public class BattleService {
 
     public BattleResult startBattle() {
         Character player = characterService.getMyCharacter();
+        // [FIX] Auto create if null
+        if (player == null) {
+            String username = SecurityContextHolder.getContext().getAuthentication().getName();
+            User user = userRepository.findByUsername(username).orElseThrow();
+            player = characterService.createDefaultCharacter(user);
+        }
+
+        // Captcha check
         captchaService.checkLockStatus(player.getUser());
         if (random.nextInt(100) < 1) {
             User u = player.getUser();
@@ -36,11 +45,12 @@ public class BattleService {
             throw new RuntimeException("CAPTCHA_REQUIRED");
         }
 
-        // Hồi 10% energy
+        // Regen 10% energy
         int regen = (int)(player.getMaxEnergy() * 0.1);
         player.setEnergy(Math.min(player.getMaxEnergy(), player.getEnergy() + regen));
         characterRepository.save(player);
 
+        // Tìm quái
         int minLv = Math.max(1, player.getLv() - 2);
         int maxLv = player.getLv() + 2;
         List<Enemy> enemies = enemyRepository.findByLevelRange(minLv, maxLv);
@@ -61,7 +71,7 @@ public class BattleService {
 
     @Transactional
     public BattleResult processTurn(Integer enemyId, Integer currentEnemyHp, boolean isParried, String attackType) {
-        Character player = characterService.getMyCharacter();
+        Character player = characterService.getMyCharacter(); // Đã có startBattle tạo rồi nên không cần check null ở đây
         Enemy enemy = enemyRepository.findById(enemyId).orElseThrow();
         BattleResult result = new BattleResult();
         result.setEnemy(enemy);
@@ -79,7 +89,7 @@ public class BattleService {
         }
         player.setEnergy(player.getEnergy() - cost);
 
-        // 2. Player Atk
+        // 2. Player đánh (Logic GameFi: Crit)
         double mul = "strong".equals(attackType) ? 2.0 : 1.0;
         int dmg = (int) (player.getBaseAtk() * (0.9 + random.nextDouble() * 0.2) * mul);
 
@@ -87,7 +97,7 @@ public class BattleService {
             dmg = (int)(dmg * (player.getBaseCritDmg() / 100.0));
             result.getCombatLog().add("💥 BẠO KÍCH! Gây " + dmg + " sát thương!");
         } else {
-            result.getCombatLog().add("🗡️ Gây " + dmg + " sát thương.");
+            result.getCombatLog().add("🗡️ Bạn đánh gây " + dmg + " sát thương.");
         }
 
         int dmgToEnemy = Math.max(1, dmg - enemy.getDef());
@@ -100,7 +110,7 @@ public class BattleService {
             return result;
         }
 
-        // 3. Enemy Atk
+        // 3. Enemy đánh (Logic GameFi: Parry)
         if (isParried) {
             result.getCombatLog().add("🛡️ ĐỠ ĐÒN THÀNH CÔNG!");
             int counter = (int)(player.getBaseAtk() * 0.5);
@@ -122,8 +132,8 @@ public class BattleService {
 
         if (player.getHp() <= 0) {
             result.setStatus("DEFEAT");
-            result.getCombatLog().add("💀 Bạn đã gục ngã...");
-            player.setHp(1);
+            result.getCombatLog().add("💀 Bạn đã trọng thương...");
+            player.setHp(1); // Không chết, chỉ còn 1 máu
         } else {
             result.setStatus("ONGOING");
         }
@@ -136,7 +146,7 @@ public class BattleService {
 
     @Transactional
     public BattleResult useSkill(Integer enemyId, Integer currentEnemyHp, Integer skillId) {
-        // Logic skill đơn giản (có thể mở rộng sau)
+        // Placeholder: Skill logic sẽ thêm sau
         return processTurn(enemyId, currentEnemyHp, false, "normal");
     }
 
@@ -155,7 +165,6 @@ public class BattleService {
         w.setGold(w.getGold().add(BigDecimal.valueOf(gold)));
         walletRepository.save(w);
 
-        // Level Up
         long req = 100L * (long)Math.pow(player.getLv(), 2);
         if (player.getExp() >= req) {
             player.setExp(player.getExp() - (int)req);
@@ -169,7 +178,6 @@ public class BattleService {
             result.getCombatLog().add("🌟 ĐỘT PHÁ CẢNH GIỚI! Cấp " + player.getLv());
         }
 
-        // Drop Item (30%)
         if (random.nextInt(100) < 30) {
             List<Item> drops = itemRepository.findAll();
             if (!drops.isEmpty()) {

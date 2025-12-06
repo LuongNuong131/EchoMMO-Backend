@@ -1,5 +1,6 @@
 package com.echommo.entity;
 
+import com.echommo.enums.CharacterStatus;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -10,7 +11,7 @@ import lombok.Data;
 public class Character {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "char_id") // <--- Quan trọng: Khớp với DB
+    @Column(name = "char_id")
     private Integer charId;
 
     @Column(unique = true, nullable = false)
@@ -39,11 +40,11 @@ public class Character {
     @Column(name = "base_crit_dmg")
     private Integer baseCritDmg = 150;
 
+    // HP & Energy
     @Column(name = "max_hp")
     private Integer maxHp = 100;
     @Column(name = "current_hp")
     private Integer hp = 100;
-
     @Column(name = "max_energy")
     private Integer maxEnergy = 50;
     @Column(name = "current_energy")
@@ -51,4 +52,9 @@ public class Character {
 
     @Column(name = "current_location")
     private String currentLocation = "Làng Tân Thủ";
+
+    // Trạng thái nhân vật (Mới)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private CharacterStatus status = CharacterStatus.IDLE;
 }

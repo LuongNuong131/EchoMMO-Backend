@@ -4,12 +4,14 @@ import com.echommo.dto.CharacterRequest;
 import com.echommo.entity.Character;
 import com.echommo.entity.*;
 import com.echommo.repository.*;
+import com.echommo.enums.CharacterStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Random;
 
 @Service
 public class CharacterService {
@@ -19,36 +21,57 @@ public class CharacterService {
     @Autowired private UserItemRepository uiRepo;
 
     public Character getMyCharacter() {
-        String u = SecurityContextHolder.getContext().getAuthentication().getName();
-        return charRepo.findByUser_UserId(userRepo.findByUsername(u).get().getUserId()).orElse(null);
+        try {
+            String u = SecurityContextHolder.getContext().getAuthentication().getName();
+            Optional<User> userOpt = userRepo.findByUsername(u);
+            if (userOpt.isEmpty()) return null;
+            return charRepo.findByUser_UserId(userOpt.get().getUserId()).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Transactional
+    public Character createDefaultCharacter(User user) {
+        Optional<Character> existing = charRepo.findByUser_UserId(user.getUserId());
+        if (existing.isPresent()) return existing.get();
+
+        CharacterRequest req = new CharacterRequest();
+        String baseName = user.getUsername();
+        String finalName = baseName;
+        int retries = 0;
+        while (charRepo.existsByName(finalName) && retries < 5) {
+            finalName = baseName + "_" + new Random().nextInt(1000);
+            retries++;
+        }
+        req.setName(finalName);
+        return createCharacterInternal(user, req);
     }
 
     @Transactional
     public Character createCharacter(CharacterRequest req) {
         User u = userRepo.findByUsername(SecurityContextHolder.getContext().getAuthentication().getName()).get();
-        if(charRepo.findByUser_UserId(u.getUserId()).isPresent()) throw new RuntimeException("Exists");
-        if(charRepo.existsByName(req.getName())) throw new RuntimeException("Taken");
+        if(charRepo.findByUser_UserId(u.getUserId()).isPresent()) throw new RuntimeException("Character exists");
+        if(charRepo.existsByName(req.getName())) throw new RuntimeException("Name taken");
+        return createCharacterInternal(u, req);
+    }
 
+    private Character createCharacterInternal(User u, CharacterRequest req) {
         Character c = new Character();
         c.setUser(u);
         c.setName(req.getName());
-
-        // FIX: Sửa lỗi Setter - Dùng setLv, setBaseAtk, setBaseDef, v.v.
-        c.setLv(1);
-        c.setHp(100); c.setMaxHp(100);
+        c.setLv(1); c.setHp(100); c.setMaxHp(100);
         c.setEnergy(50); c.setMaxEnergy(50);
-        c.setBaseAtk(10); c.setBaseDef(5);
-        c.setBaseSpeed(10);
-        c.setBaseCritRate(5);
-        c.setBaseCritDmg(150);
-
+        c.setBaseAtk(10); c.setBaseDef(5); c.setBaseSpeed(10);
+        c.setBaseCritRate(5); c.setBaseCritDmg(150);
+        c.setStatus(CharacterStatus.IDLE);
         c = charRepo.save(c);
 
-        for(String n : Arrays.asList("Kiếm Gỗ Tập Luyện", "Áo Vải Thô", "Bình Máu Nhỏ")) {
+        for(String n : Arrays.asList("Kiếm Gỗ", "Áo Vải", "Bình Máu")) {
             Optional<Item> i = itemRepo.findByName(n);
             if(i.isPresent()) {
                 UserItem ui = new UserItem();
-                ui.setUser(u); ui.setItem(i.get()); ui.setQuantity(n.contains("Máu")?5:1); ui.setIsEquipped(false); ui.setEnhanceLevel(0);
+                ui.setUser(u); ui.setItem(i.get()); ui.setQuantity(1); ui.setIsEquipped(false); ui.setEnhanceLevel(0);
                 uiRepo.save(ui);
             }
         }
@@ -59,6 +82,7 @@ public class CharacterService {
     public String renameCharacter(String name) {
         if(charRepo.existsByName(name)) throw new RuntimeException("Tên đã tồn tại");
         Character c = getMyCharacter();
+        if (c == null) throw new RuntimeException("Chưa có nhân vật");
         c.setName(name);
         charRepo.save(c);
         return "Đổi tên thành công: "+name;
