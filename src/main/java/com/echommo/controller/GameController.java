@@ -1,10 +1,11 @@
 package com.echommo.controller;
 
 import com.echommo.entity.Item;
-import com.echommo.entity.Character;
-import com.echommo.entity.User; // <--- FIX: Thêm import cho User Entity
+import com.echommo.entity.User;
+import com.echommo.service.BattleService;
 import com.echommo.service.GameService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,50 +17,71 @@ import java.util.Map;
 public class GameController {
 
     @Autowired private GameService gameService;
+    @Autowired private BattleService battleService;
 
-    // FIX: Đổi kiểu trả về từ Player sang User, và kiểu ID từ Long sang Integer
     @GetMapping("/player/{id}")
     public User getPlayer(@PathVariable Integer id) {
         return gameService.getPlayerOrCreate(id);
     }
 
-    // FIX: Đổi kiểu ID từ Long sang Integer
-    @PostMapping("/attack")
-    public Map<String, Object> attack(
-            @RequestParam Integer playerId,
-            @RequestParam(defaultValue = "false") boolean isParried,
-            @RequestParam(defaultValue = "normal") String attackType
-    ) {
-        return gameService.attackEnemy(playerId, isParried, attackType);
+    @PostMapping("/battle/start")
+    public ResponseEntity<?> startBattle() {
+        try {
+            return ResponseEntity.ok(battleService.startBattle());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
-    // FIX: Đổi kiểu ID từ Long sang Integer
+    // [FIX] Gọi logic Battle mới
+    @PostMapping("/attack")
+    public ResponseEntity<?> attack(@RequestBody Map<String, Object> payload) {
+        try {
+            return ResponseEntity.ok(battleService.attackEnemy(payload));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     @PostMapping("/explore")
     public Map<String, Object> explore(@RequestParam Integer playerId) {
         return gameService.explore(playerId);
     }
 
-    // FIX: Đổi kiểu trả về từ Player sang User, và kiểu ID sang Integer
     @PostMapping("/rest")
     public User rest(@RequestParam Integer playerId) {
         return gameService.restAtInn(playerId);
     }
 
-    // FIX: Đổi kiểu ID từ Long sang Integer
     @GetMapping("/inventory/{playerId}")
     public List<Item> getInventory(@PathVariable Integer playerId) {
         return gameService.getInventory(playerId);
     }
 
-    // FIX: Đổi kiểu ID từ Long sang Integer (cả Player ID và Item ID)
     @PostMapping("/equip")
     public Map<String, Object> equip(@RequestParam Integer playerId, @RequestParam Integer itemId) {
         return gameService.equipItem(playerId, itemId);
     }
 
-    // FIX: Đổi kiểu ID từ Long sang Integer (cả Player ID và Item ID)
     @PostMapping("/unequip")
     public Map<String, Object> unequip(@RequestParam Integer playerId, @RequestParam Integer itemId) {
         return gameService.unequipItem(playerId, itemId);
+    }
+
+    // Skill endpoint mapping
+    @PostMapping("/skill")
+    public ResponseEntity<?> useSkill(@RequestBody Map<String, Object> payload) {
+        try {
+            // Tạm thời dùng chung logic attack vì skill cũng là 1 dạng attack có buff/effect
+            return ResponseEntity.ok(battleService.attackEnemy(payload));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/skills")
+    public ResponseEntity<?> getSkills() {
+        return ResponseEntity.ok(battleService.getAllSkills());
     }
 }

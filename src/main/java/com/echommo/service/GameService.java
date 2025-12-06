@@ -27,10 +27,6 @@ public class GameService {
     @Autowired private ItemRepository itemRepo;
     @Autowired private WalletRepository walletRepo;
 
-    // Cấu hình game
-    // private static final int EXPLORE_ENERGY_COST = 2; // XÓA DÒNG NÀY HOẶC COMMENT LẠI
-    private static final int ATTACK_ENERGY_COST = 2;
-    private static final int STRONG_ATTACK_ENERGY_COST = 5;
     private static final long BASE_EXP_REQUIREMENT = 100L;
     private static final BigDecimal REST_COST = new BigDecimal("50");
 
@@ -59,8 +55,8 @@ public class GameService {
         if (character.getExp() >= requiredExp) {
             character.setExp((int)(character.getExp() - requiredExp));
             character.setLv(character.getLv() + 1);
-            character.setBaseAtk(character.getBaseAtk() + 2);
-            character.setBaseDef(character.getBaseDef() + 1);
+            character.setBaseAtk(character.getBaseAtk() + 5);
+            character.setBaseDef(character.getBaseDef() + 2);
             character.setMaxHp(character.getMaxHp() + 20);
             character.setMaxEnergy(character.getMaxEnergy() + 5);
             character.setHp(character.getMaxHp());
@@ -71,71 +67,18 @@ public class GameService {
         return null;
     }
 
-    public Map<String, Object> attackEnemy(Integer userId, boolean isParried, String attackType) {
-        Character character = getCharacter(userId);
-        Map<String, Object> result = new HashMap<>();
-
-        int energyCost = "strong".equals(attackType) ? STRONG_ATTACK_ENERGY_COST : ATTACK_ENERGY_COST;
-        if (character.getEnergy() < energyCost) {
-            result.put("status", "FAIL");
-            result.put("message", "Năng lượng không đủ để tấn công.");
-            return result;
-        }
-        character.setEnergy(character.getEnergy() - energyCost);
-
-        int enemyAtk = 15 + character.getLv();
-        int expReward = 35;
-        double damageMultiplier = "strong".equals(attackType) ? 2.0 : 1.0;
-
-        int damageDealt = (int) (character.getBaseAtk() * (0.9 + Math.random() * 0.2) * damageMultiplier);
-        int damageTaken = isParried ? 0 : Math.max(1, enemyAtk - (character.getBaseDef() / 2));
-
-        int currentHp = Math.max(0, character.getHp() - damageTaken);
-        character.setHp(currentHp);
-
-        String message;
-        if (currentHp == 0) {
-            result.put("status", "DIED");
-            message = "💀 Thất bại...";
-            character.setHp(character.getMaxHp() / 2);
-        } else {
-            result.put("status", "ALIVE");
-            character.setExp(character.getExp() + expReward);
-            message = "Trúng! (+" + expReward + " EXP)";
-            String lvUpMsg = checkLevelUp(character);
-            if (lvUpMsg != null) {
-                message = lvUpMsg;
-                result.put("levelUp", true);
-            }
-        }
-
-        charRepo.save(character);
-        result.put("message", isParried ? "🛡️ PARRY! " + message : message);
-        result.put("damageDealt", damageDealt);
-        result.put("damageTaken", damageTaken);
-        result.put("playerHp", character.getHp());
-        result.put("playerEnergy", character.getEnergy());
-        result.put("playerExp", character.getExp());
-        result.put("playerLv", character.getLv());
-        result.put("nextLevelExp", BASE_EXP_REQUIREMENT * (long) Math.pow(character.getLv(), 2));
-
-        return result;
-    }
-
-    // [UPDATED] Xóa logic trừ năng lượng
+    // [FIX] HÀNH TẨU MIỄN PHÍ (Không trừ Energy)
     public Map<String, Object> explore(Integer userId) {
         Character character = getCharacter(userId);
         Map<String, Object> result = new HashMap<>();
 
-        // --- BỎ ĐOẠN CHECK ENERGY ---
-        // if (character.getEnergy() < EXPLORE_ENERGY_COST) { ... }
-        // character.setEnergy(character.getEnergy() - EXPLORE_ENERGY_COST);
-
+        // Cộng EXP
         int expGain = 10;
         character.setExp(character.getExp() + expGain);
         String lvMsg = checkLevelUp(character);
         boolean isLevelUp = (lvMsg != null);
 
+        // Random sự kiện
         double roll = Math.random() * 100;
         String message = "";
 
@@ -159,6 +102,7 @@ public class GameService {
         if(isLevelUp) message += " [LÊN CẤP!]";
 
         charRepo.save(character);
+
         result.put("message", message);
         result.put("playerExp", character.getExp());
         result.put("playerLv", character.getLv());
@@ -168,6 +112,7 @@ public class GameService {
         return result;
     }
 
+    // Nghỉ ngơi tốn 50 vàng
     public User restAtInn(Integer userId) {
         Character character = getCharacter(userId);
         User user = character.getUser();
