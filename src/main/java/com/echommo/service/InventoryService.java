@@ -1,128 +1,75 @@
 package com.echommo.service;
 
-import com.echommo.entity.*;
-import com.echommo.entity.Character;
-import com.echommo.repository.*;
+import com.echommo.entity.UserItem;
+import com.echommo.repository.UserItemRepository;
+import com.echommo.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.ArrayList;
+
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
 
 @Service
 public class InventoryService {
 
-    @Autowired private UserItemRepository userItemRepository;
-    @Autowired private UserRepository userRepository;
-    @Autowired private CharacterRepository characterRepository;
-    @Autowired private WalletRepository walletRepository;
-    @Autowired private ItemRepository itemRepository;
+    @Autowired
+    private UserItemRepository userItemRepo;
 
-    public List<UserItem> getMyInventory() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByUsername(username).orElseThrow();
-        Wallet wallet = user.getWallet();
+    @Autowired
+    private UserRepository userRepo;
 
-        List<UserItem> inventory = userItemRepository.findByUser_UserIdOrderByIsEquippedDesc(user.getUserId());
-        List<UserItem> displayList = new ArrayList<>(inventory);
-
-        // Tạo item ảo từ Wallet (Gỗ/Đá) để hiển thị
-        if (wallet.getWood() > 0) createVirtualItem(user, "Gỗ Sồi", wallet.getWood(), displayList);
-        if (wallet.getStone() > 0) createVirtualItem(user, "Đá Cứng", wallet.getStone(), displayList);
-
-        return displayList;
+    // Lấy danh sách đồ
+    public List<UserItem> getInventory(Long userId) {
+        return userItemRepo.findByUser_UserId(userId);
     }
 
-    private void createVirtualItem(User user, String itemName, Integer quantity, List<UserItem> list) {
-        Optional<Item> itemOpt = itemRepository.findByName(itemName);
-        if (itemOpt.isPresent()) {
-            UserItem dummy = new UserItem();
-            dummy.setUserItemId(-new Random().nextInt(10000)); // ID âm để phân biệt
-            dummy.setUser(user);
-            dummy.setItem(itemOpt.get());
-            dummy.setQuantity(quantity);
-            dummy.setIsEquipped(false);
-            dummy.setEnhanceLevel(0);
-            list.add(dummy);
-        }
-    }
-
+    // --- LOGIC MẶC TRANG BỊ ---
     @Transactional
-    public String useItem(Integer userItemId) {
-        UserItem item = userItemRepository.findById(userItemId).orElseThrow();
-        if (!"CONSUMABLE".equals(item.getItem().getType())) throw new RuntimeException("Không dùng được");
+    public void equipItem(Long userId, Long userItemId) {
+        // 1. Tìm món đồ cần mặc
+        UserItem newItem = userItemRepo.findById(userItemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
 
-        Character character = characterRepository.findByUser_UserId(item.getUser().getUserId()).orElseThrow();
-
-        if (item.getItem().getHpBonus() > 0) {
-            character.setHp(Math.min(character.getMaxHp(), character.getHp() + item.getItem().getHpBonus()));
+        // 2. Check quyền sở hữu
+        if (!newItem.getUser().getUserId().equals(userId)) {
+            throw new RuntimeException("This item does not belong to you!");
         }
 
-        if (item.getQuantity() > 1) {
-            item.setQuantity(item.getQuantity() - 1);
-            userItemRepository.save(item);
-        } else {
-            userItemRepository.delete(item);
+        // 3. Lấy loại item (WEAPON, ARMOR, HELMET...)
+        String itemType = newItem.getItem().getType();
+
+        // 4. Tìm xem user có đang mặc món nào cùng loại không?
+        Optional<UserItem> currentEquipped = userItemRepo
+                .findByUser_UserIdAndItem_TypeAndIsEquippedTrue(userId, itemType);
+
+        // 5. Nếu có -> Tháo món cũ ra
+        if (currentEquipped.isPresent()) {
+            UserItem oldItem = currentEquipped.get();
+            // Nếu chính là món đang click thì bỏ qua (hoặc coi như tháo ra mặc lại)
+            if (!oldItem.getUserItemId().equals(newItem.getUserItemId())) {
+                oldItem.setIsEquipped(false);
+                userItemRepo.save(oldItem);
+            }
         }
-        characterRepository.save(character);
-        return "Đã sử dụng " + item.getItem().getName();
+
+        // 6. Mặc món mới vào
+        newItem.setIsEquipped(true);
+        userItemRepo.save(newItem);
     }
 
+    // --- LOGIC THÁO TRANG BỊ ---
     @Transactional
-    public String equipItem(Integer userItemId) {
-        UserItem itemToEquip = userItemRepository.findById(userItemId).orElseThrow();
-        User user = itemToEquip.getUser();
-        Character character = characterRepository.findByUser_UserId(user.getUserId()).orElseThrow();
+    public void unequipItem(Long userId, Long userItemId) {
+        UserItem item = userItemRepo.findById(userItemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
 
-        if (itemToEquip.getIsEquipped()) return "Đã trang bị rồi";
-
-        // Gỡ đồ cũ cùng loại
-        String type = itemToEquip.getItem().getType();
-        UserItem oldItem = userItemRepository.findByUser_UserIdAndItem_TypeAndIsEquippedTrue(user.getUserId(), type);
-
-        if (oldItem != null) {
-            oldItem.setIsEquipped(false);
-            updateStats(character, oldItem.getItem(), -1); // Trừ chỉ số cũ
-            userItemRepository.save(oldItem);
+        if (!item.getUser().getUserId().equals(userId)) {
+            throw new RuntimeException("Not your item");
         }
 
-        // Mặc đồ mới
-        itemToEquip.setIsEquipped(true);
-        updateStats(character, itemToEquip.getItem(), 1); // Cộng chỉ số mới
-
-        userItemRepository.save(itemToEquip);
-        characterRepository.save(character);
-
-        return "Đã trang bị: " + itemToEquip.getItem().getName();
-    }
-
-    @Transactional
-    public String unequipItem(Integer userItemId) {
-        UserItem item = userItemRepository.findById(userItemId).orElseThrow();
-        if (!item.getIsEquipped()) return "Chưa trang bị";
-
-        Character character = characterRepository.findByUser_UserId(item.getUser().getUserId()).orElseThrow();
-
+        // Đơn giản là set false
         item.setIsEquipped(false);
-        updateStats(character, item.getItem(), -1); // Trừ chỉ số
-
-        userItemRepository.save(item);
-        characterRepository.save(character);
-        return "Đã tháo: " + item.getItem().getName();
+        userItemRepo.save(item);
     }
-
-    private void updateStats(Character c, Item i, int sign) {
-        c.setBaseAtk(c.getBaseAtk() + (i.getAtkBonus() * sign));
-        c.setBaseDef(c.getBaseDef() + (i.getDefBonus() * sign));
-        c.setMaxHp(c.getMaxHp() + (i.getHpBonus() * sign));
-        c.setBaseSpeed(c.getBaseSpeed() + (i.getSpeedBonus() * sign));
-        c.setBaseCritRate(c.getBaseCritRate() + (i.getCritRateBonus() * sign));
-
-        if (c.getHp() > c.getMaxHp()) c.setHp(c.getMaxHp());
-    }
-
-    public String enhanceItem(Integer id) { return "Tính năng đang bảo trì"; }
 }

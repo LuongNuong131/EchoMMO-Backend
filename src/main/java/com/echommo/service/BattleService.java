@@ -1,177 +1,157 @@
 package com.echommo.service;
 
 import com.echommo.dto.BattleResult;
+import com.echommo.entity.*;
 import com.echommo.entity.Character;
-import com.echommo.entity.Enemy;
-import com.echommo.entity.Skill;
-import com.echommo.entity.Wallet;
 import com.echommo.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 
 @Service
-@Transactional
 public class BattleService {
+
     @Autowired private CharacterRepository charRepo;
     @Autowired private EnemyRepository enemyRepo;
-    @Autowired private UserRepository userRepo;
     @Autowired private WalletRepository walletRepo;
-    @Autowired private SkillRepository skillRepository;
+    @Autowired private ItemRepository itemRepo;
+    @Autowired private UserItemRepository userItemRepo; // Dùng để lấy đồ đang mặc
 
     private final Random random = new Random();
+    private static final double DROP_RATE = 0.3;
 
-    public BattleResult startBattle() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        Character player = userRepo.findByUsername(username).get().getCharacter();
+    @Transactional
+    public BattleResult fight(Long charId, Long enemyId) {
+        Character character = charRepo.findById(charId)
+                .orElseThrow(() -> new RuntimeException("Character not found"));
+        Enemy enemy = enemyRepo.findById(enemyId)
+                .orElseThrow(() -> new RuntimeException("Enemy not found"));
 
-        // Random quái
-        List<Enemy> enemies = enemyRepo.findAll();
-        Enemy enemy = enemies.get(random.nextInt(enemies.size()));
-
-        BattleResult res = new BattleResult();
-        res.setEnemy(enemy);
-        res.setPlayerHp(player.getHp());
-        res.setPlayerMaxHp(player.getMaxHp());
-        res.setEnemyHp(enemy.getHp());
-        res.setEnemyMaxHp(enemy.getHp());
-        res.setStatus("ONGOING");
-        res.setCombatLog(new ArrayList<>());
-        res.getCombatLog().add("⚔️ Gặp " + enemy.getName() + "! (Tốc độ: " + (10 + enemy.getLevel() * 2) + ")");
-
-        return res;
-    }
-
-    // LOGIC ĐÁNH TỰ ĐỘNG (1 LƯỢT)
-    public BattleResult attackEnemy(Map<String, Object> payload) {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        Character player = userRepo.findByUsername(username).get().getCharacter();
-
-        Integer enemyId = (Integer) payload.get("enemyId");
-        Integer currentEnemyHp = (Integer) payload.get("enemyHp");
-        Boolean isBuffed = (Boolean) payload.get("isBuffed");
-        if (isBuffed == null) isBuffed = false;
-
-        Enemy enemy = enemyRepo.findById(enemyId).orElseThrow();
-        BattleResult result = new BattleResult();
-        result.setEnemy(enemy);
-        result.setPlayerMaxHp(player.getMaxHp());
-        result.setEnemyMaxHp(enemy.getHp());
         List<String> logs = new ArrayList<>();
 
-        // 1. SO SÁNH TỐC ĐỘ
-        int enemySpeed = 10 + enemy.getLevel() * 2;
-        int playerSpeed = player.getBaseSpeed();
-        boolean playerFirst = playerSpeed >= enemySpeed;
+        // 1. TÍNH CHỈ SỐ TỔNG (Base + Trang bị)
+        List<UserItem> equippedItems = userItemRepo.findByUser_UserIdAndIsEquippedTrue(character.getUser().getUserId());
 
-        // 2. XỬ LÝ BUFF TỤ LỰC (Tiêu hao Energy)
-        double dmgMultiplier = 1.0;
-        if (isBuffed) {
-            if (player.getEnergy() >= 5) {
-                player.setEnergy(player.getEnergy() - 5);
-                dmgMultiplier = 1.5; // Tăng 50% sát thương
-                logs.add("🔥 Tụ lực thành công! Sát thương tăng mạnh.");
+        int totalAtk = character.getBaseAtk();
+        int totalDef = character.getBaseDef();
+        int totalCrit = character.getBaseCritRate();
+        int extraHp = 0; // Máu cộng thêm từ đồ
+
+        for (UserItem ui : equippedItems) {
+            totalAtk += ui.getItem().getAtkBonus();
+            totalDef += ui.getItem().getDefBonus();
+            totalCrit += ui.getItem().getCritRateBonus();
+            extraHp += ui.getItem().getHpBonus();
+        }
+
+        // HP dùng trong trận = HP hiện tại (không vượt quá Max Base + Max Item)
+        int maxTotalHp = character.getMaxHp() + extraHp;
+        // Logic đơn giản: Khi vào trận hồi đầy máu (hoặc dùng máu hiện tại tùy game design)
+        // Ở đây giả sử hồi đầy cho dễ test
+        int currentHp = maxTotalHp;
+        int enemyHp = enemy.getHp();
+
+        logs.add("⚔️ Bắt đầu trận đấu! (Công lực: " + totalAtk + " | Hộ thể: " + totalDef + ")");
+
+        // 2. BATTLE LOOP
+        int turn = 0;
+        boolean isWin = false;
+
+        while (currentHp > 0 && enemyHp > 0 && turn < 50) {
+            turn++;
+
+            // --- Player Turn ---
+            int dmgToEnemy = Math.max(1, totalAtk - enemy.getDef());
+            // Crit?
+            if (random.nextInt(100) < totalCrit) {
+                dmgToEnemy = (int) (dmgToEnemy * (character.getBaseCritDmg() / 100.0));
+                logs.add("[Turn " + turn + "] 💥 Bạn bạo kích: " + dmgToEnemy + " dmg!");
             } else {
-                logs.add("⚠️ Không đủ nội lực để tụ lực!");
+                logs.add("[Turn " + turn + "] 🗡️ Bạn tấn công: " + dmgToEnemy + " dmg.");
             }
+            enemyHp -= dmgToEnemy;
+
+            if (enemyHp <= 0) {
+                isWin = true;
+                break;
+            }
+
+            // --- Enemy Turn ---
+            int dmgToChar = Math.max(1, enemy.getAtk() - totalDef);
+            currentHp -= dmgToChar;
+            logs.add("[Turn " + turn + "] 👾 " + enemy.getName() + " đánh lại: " + dmgToChar + " dmg!");
         }
 
-        // 3. GIAO CHIẾN
-        if (playerFirst) {
-            // Người đánh trước
-            currentEnemyHp = doPlayerAttack(player, enemy, currentEnemyHp, dmgMultiplier, logs);
-            if (currentEnemyHp > 0) {
-                doEnemyAttack(player, enemy, logs); // Quái phản công
-            }
-        } else {
-            // Quái đánh trước
-            logs.add("⚡ Quái nhanh hơn! Nó tấn công trước.");
-            doEnemyAttack(player, enemy, logs);
-            if (player.getHp() > 0) {
-                currentEnemyHp = doPlayerAttack(player, enemy, currentEnemyHp, dmgMultiplier, logs); // Người phản công
-            }
-        }
+        // 3. KẾT QUẢ
+        BattleResult result = new BattleResult();
+        result.setLogs(logs);
+        result.setWin(isWin);
 
-        // 4. KẾT QUẢ
-        if (player.getHp() <= 0) {
-            result.setStatus("DEFEAT");
-            player.setHp(0);
-            logs.add("💀 Bạn đã gục ngã...");
-        } else if (currentEnemyHp <= 0) {
-            result.setStatus("VICTORY");
-            currentEnemyHp = 0;
-
-            int gold = enemy.getGoldReward();
+        if (isWin) {
+            // Logic nhận thưởng giữ nguyên như cũ
             int exp = enemy.getExpReward();
-            player.setExp(player.getExp() + exp);
+            int gold = enemy.getGoldReward();
 
-            Wallet w = player.getUser().getWallet();
-            w.setGold(w.getGold().add(BigDecimal.valueOf(gold)));
-            walletRepo.save(w);
+            character.setExp(character.getExp() + exp);
+            if (character.getExp() >= character.getLv() * 100L) {
+                character.setExp(character.getExp() - (character.getLv() * 100L));
+                character.setLv(character.getLv() + 1);
+                character.setBaseAtk(character.getBaseAtk() + 10);
+                character.setBaseDef(character.getBaseDef() + 5);
+                character.setMaxHp(character.getMaxHp() + 100);
+                character.setHp(character.getMaxHp());
+                logs.add("🌟 LEVEL UP! Cấp " + character.getLv());
+            } else {
+                // Cập nhật máu sau trận (không quá Max gốc, xử lý đơn giản)
+                character.setHp(Math.min(currentHp, character.getMaxHp()));
+            }
 
+            Wallet wallet = walletRepo.findByUser_UserId(character.getUser().getUserId())
+                    .orElseThrow(() -> new RuntimeException("Wallet not found"));
+            wallet.setGold(wallet.getGold().add(new BigDecimal(gold)));
+            walletRepo.save(wallet);
+
+            logs.add("🏆 Chiến thắng! Nhận " + exp + " EXP, " + gold + " vàng.");
             result.setExpEarned(exp);
             result.setGoldEarned(gold);
-            logs.add("🏆 Chiến thắng! Nhận " + exp + " Exp, " + gold + " Vàng.");
 
-            checkLevelUp(player, logs);
+            handleItemDrop(character.getUser(), logs, result);
+
         } else {
-            result.setStatus("ONGOING");
+            logs.add("💀 Thất bại...");
+            character.setHp(1);
         }
 
-        // [FIX BUG] Lưu máu nhân vật
-        charRepo.save(player);
-
-        result.setPlayerHp(player.getHp());
-        result.setPlayerEnergy(player.getEnergy());
-        result.setEnemyHp(currentEnemyHp);
-        result.setCombatLog(logs);
-
+        charRepo.save(character);
         return result;
     }
 
-    private int doPlayerAttack(Character p, Enemy e, int eHp, double mul, List<String> logs) {
-        int baseDmg = p.getBaseAtk();
-        // Crit logic
-        boolean isCrit = random.nextInt(100) < p.getBaseCritRate();
-        if (isCrit) {
-            baseDmg = (int) (baseDmg * (p.getBaseCritDmg() / 100.0));
+    private void handleItemDrop(User user, List<String> logs, BattleResult result) {
+        if (random.nextDouble() <= DROP_RATE) {
+            List<String> equipmentTypes = Arrays.asList("WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "NECKLACE");
+            List<Item> droppableItems = itemRepo.findByTypeIn(equipmentTypes);
+
+            if (!droppableItems.isEmpty()) {
+                Item droppedItem = droppableItems.get(random.nextInt(droppableItems.size()));
+                UserItem newItem = new UserItem();
+                newItem.setUser(user);
+                newItem.setItem(droppedItem);
+                newItem.setQuantity(1);
+                newItem.setIsEquipped(false);
+                newItem.setEnhanceLevel(0);
+                userItemRepo.save(newItem);
+
+                logs.add("🎁 NHẶT ĐƯỢC: [" + droppedItem.getName() + "]");
+                result.setDroppedItemName(droppedItem.getName());
+                result.setDroppedItemImage(droppedItem.getImageUrl());
+                result.setDroppedItemRarity(droppedItem.getRarity());
+            }
         }
-
-        int dmg = (int) (Math.max(1, baseDmg - e.getDef()) * mul);
-        eHp -= dmg;
-
-        String msg = isCrit ? "💥 BẠO KÍCH! Gây " + dmg + " sát thương." : "⚔️ Bạn gây " + dmg + " sát thương.";
-        logs.add(msg);
-        return Math.max(0, eHp);
-    }
-
-    private void doEnemyAttack(Character p, Enemy e, List<String> logs) {
-        int dmg = Math.max(1, e.getAtk() - p.getBaseDef());
-        p.setHp(Math.max(0, p.getHp() - dmg)); // Trừ máu nhân vật
-        logs.add("👾 " + e.getName() + " đánh bạn mất " + dmg + " máu!");
-    }
-
-    private void checkLevelUp(Character c, List<String> logs) {
-        long req = 100L * (long) Math.pow(c.getLv(), 2);
-        if (c.getExp() >= req) {
-            c.setExp((int)(c.getExp() - req));
-            c.setLv(c.getLv() + 1);
-            c.setMaxHp(c.getMaxHp() + 20);
-            c.setHp(c.getMaxHp());
-            c.setBaseAtk(c.getBaseAtk() + 5);
-            c.setBaseDef(c.getBaseDef() + 2);
-            logs.add("🌟 CHÚC MỪNG! Đã thăng lên cấp " + c.getLv());
-        }
-    }
-
-    public List<Skill> getAllSkills() {
-        return skillRepository.findAll();
     }
 }
