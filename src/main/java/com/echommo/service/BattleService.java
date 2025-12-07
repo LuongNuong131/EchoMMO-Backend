@@ -364,12 +364,12 @@ public class BattleService {
         int variant = random.nextInt(5);
 
         switch (type) {
-            case "WEAPON":   return "s_sword_" + variant + ".png";
-            case "ARMOR":    return "a_armor_" + variant + ".png";
-            case "HELMET":   return "h_helmet_" + variant + ".png";
-            case "BOOTS":    return "b_boot_" + variant + ".png";
-            case "RING":     return "ri_ring_" + variant + ".png";
-            case "NECKLACE": return "n_necklace_" + variant + ".png";
+            case "WEAPON":   return "s_sword_" + variant;
+            case "ARMOR":    return "a_armor_" + variant;
+            case "HELMET":   return "h_helmet_" + variant;
+            case "BOOTS":    return "b_boot_" + variant;
+            case "RING":     return "ri_ring_" + variant;
+            case "NECKLACE": return "n_neck_" + variant;
             default:         return "s_sword_0.png";
         }
     }
