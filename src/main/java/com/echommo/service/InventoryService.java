@@ -20,13 +20,13 @@ public class InventoryService {
     private UserRepository userRepo;
 
     // Lấy danh sách đồ
-    public List<UserItem> getInventory(Long userId) {
+    public List<UserItem> getInventory(Integer userId) { // [FIX] Long -> Integer
         return userItemRepo.findByUser_UserId(userId);
     }
 
     // --- LOGIC MẶC TRANG BỊ ---
     @Transactional
-    public void equipItem(Long userId, Long userItemId) {
+    public void equipItem(Integer userId, Integer userItemId) { // [FIX] Long -> Integer
         // 1. Tìm món đồ cần mặc
         UserItem newItem = userItemRepo.findById(userItemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
@@ -60,7 +60,7 @@ public class InventoryService {
 
     // --- LOGIC THÁO TRANG BỊ ---
     @Transactional
-    public void unequipItem(Long userId, Long userItemId) {
+    public void unequipItem(Integer userId, Integer userItemId) { // [FIX] Long -> Integer
         UserItem item = userItemRepo.findById(userItemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
 

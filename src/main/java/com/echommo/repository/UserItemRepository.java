@@ -8,14 +8,16 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface UserItemRepository extends JpaRepository<UserItem, Long> {
+public interface UserItemRepository extends JpaRepository<UserItem, Integer> {
     // Lấy tất cả đồ của user (cho hành trang)
-    List<UserItem> findByUser_UserId(Long userId);
+    List<UserItem> findByUser_UserId(Integer userId);
 
     // Lấy tất cả đồ ĐANG MẶC (để tính chỉ số cộng thêm khi đánh nhau)
-    List<UserItem> findByUser_UserIdAndIsEquippedTrue(Long userId);
+    List<UserItem> findByUser_UserIdAndIsEquippedTrue(Integer userId);
 
-    // Tìm món đồ ĐANG MẶC theo LOẠI (ví dụ: tìm xem đang mặc cái áo nào không)
-    // Dùng để: Mặc áo mới -> tìm áo cũ tháo ra
-    Optional<UserItem> findByUser_UserIdAndItem_TypeAndIsEquippedTrue(Long userId, String type);
+    // Tìm món đồ ĐANG MẶC theo LOẠI
+    Optional<UserItem> findByUser_UserIdAndItem_TypeAndIsEquippedTrue(Integer userId, String type);
+
+    // [FIX] Thêm hàm này để MarketplaceService sử dụng (logic gộp stack)
+    List<UserItem> findByUser_UserIdOrderByIsEquippedDesc(Integer userId);
 }

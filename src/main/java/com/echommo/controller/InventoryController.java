@@ -1,13 +1,15 @@
 package com.echommo.controller;
 
+import com.echommo.entity.User;
 import com.echommo.entity.UserItem;
-import com.echommo.security.JwtUtils;
+import com.echommo.repository.UserRepository;
 import com.echommo.service.InventoryService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 
 @RestController
@@ -16,34 +18,30 @@ import java.util.List;
 public class InventoryController {
 
     @Autowired private InventoryService inventoryService;
-    @Autowired private JwtUtils jwtUtils;
+    @Autowired private UserRepository userRepository; // [FIX] Thêm Repo để tìm User ID
 
-    private Long getUserIdFromRequest(HttpServletRequest request) {
-        String jwt = jwtUtils.parseJwt(request);
-        if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
-            String username = jwtUtils.getUserNameFromJwtToken(jwt);
-            // Trong thực tế nên cache user id, ở đây gọi service tạm hoặc dùng custom authen
-            // Để đơn giản, giả sử bạn có cách lấy ID hoặc query từ DB
-            return jwtUtils.getUserIdFromToken(jwt);
-            // Lưu ý: Bạn cần chắc chắn JwtUtils có hàm trả về ID,
-            // nếu không thì dùng UserRepository tìm theo username
-        }
-        return null;
+    // [FIX] Helper method chuẩn để lấy UserID từ Security Context
+    private Integer getCurrentUserId() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return user.getUserId();
     }
 
     @GetMapping
-    public ResponseEntity<List<UserItem>> getMyInventory(HttpServletRequest request) {
-        Long userId = getUserIdFromRequest(request); // Bạn cần tự implement logic lấy ID từ token
-        if (userId == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(inventoryService.getInventory(userId));
+    public ResponseEntity<List<UserItem>> getMyInventory() {
+        try {
+            Integer userId = getCurrentUserId();
+            return ResponseEntity.ok(inventoryService.getInventory(userId));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).build();
+        }
     }
 
     @PostMapping("/equip/{userItemId}")
-    public ResponseEntity<?> equipItem(@PathVariable Long userItemId, HttpServletRequest request) {
-        Long userId = getUserIdFromRequest(request);
-        if (userId == null) return ResponseEntity.status(401).build();
-
+    public ResponseEntity<?> equipItem(@PathVariable Integer userItemId) { // [FIX] Long -> Integer
         try {
+            Integer userId = getCurrentUserId();
             inventoryService.equipItem(userId, userItemId);
             return ResponseEntity.ok("Equipped successfully");
         } catch (RuntimeException e) {
@@ -52,11 +50,9 @@ public class InventoryController {
     }
 
     @PostMapping("/unequip/{userItemId}")
-    public ResponseEntity<?> unequipItem(@PathVariable Long userItemId, HttpServletRequest request) {
-        Long userId = getUserIdFromRequest(request);
-        if (userId == null) return ResponseEntity.status(401).build();
-
+    public ResponseEntity<?> unequipItem(@PathVariable Integer userItemId) { // [FIX] Long -> Integer
         try {
+            Integer userId = getCurrentUserId();
             inventoryService.unequipItem(userId, userItemId);
             return ResponseEntity.ok("Unequipped successfully");
         } catch (RuntimeException e) {
