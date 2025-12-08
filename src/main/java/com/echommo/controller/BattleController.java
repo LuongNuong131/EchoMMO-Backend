@@ -12,26 +12,34 @@ public class BattleController {
 
     @Autowired private BattleService battleService;
 
-    // Bắt đầu trận đấu mới
     @PostMapping("/start")
     public ResponseEntity<?> startBattle() {
         try {
             return ResponseEntity.ok(battleService.startBattle());
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            e.printStackTrace(); // In lỗi ra Terminal của Server để xem
+            return ResponseEntity.badRequest().body("Lỗi Server: " + e.toString());
         }
     }
 
-    // Thực hiện lượt tiếp theo (Hoặc hành động Đỡ đòn)
     @PostMapping("/action")
     public ResponseEntity<?> performAction(@RequestBody Map<String, String> payload) {
         try {
-            // Payload: { "action": "ATTACK" } hoặc { "action": "BLOCK" }
             String action = payload.getOrDefault("action", "ATTACK");
             return ResponseEntity.ok(battleService.processTurn(action));
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body("Lỗi Action: " + e.toString());
+        }
+    }
+
+    @PostMapping("/attack")
+    public ResponseEntity<?> attack(@RequestBody Map<String, Object> payload) {
+        try {
+            return ResponseEntity.ok(battleService.attackEnemy(payload));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(e.toString());
         }
     }
 }

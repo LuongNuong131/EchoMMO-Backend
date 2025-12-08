@@ -27,34 +27,31 @@ public class BattleService {
     private final Random random = new Random();
     private static final double DROP_RATE = 0.3;
 
-    // --- 1. START BATTLE (LOGIC UPDATE AN TOÀN) ---
+    // --- 1. START BATTLE ---
     @Transactional
     public BattleResult startBattle() {
         User user = getCurrentUser();
         Character character = charRepo.findByUser_UserId(user.getUserId())
                 .orElseThrow(() -> new RuntimeException("Chưa tạo nhân vật"));
 
-        // [FIX QUAN TRỌNG] Tìm session cũ để Update, không Delete để tránh lỗi khóa ngoại
+        // [FIX] Dùng cơ chế SaveOrUpdate thay vì Delete -> Insert để tránh lỗi khóa DB
         BattleSession session = sessionRepo.findByUser_UserId(user.getUserId())
                 .orElse(new BattleSession());
 
         if (session.getId() == null) {
-            session.setUser(user); // Gán user nếu là session mới
+            session.setUser(user);
         }
 
-        // Lấy danh sách quái từ DB (Bạn đã seed 3 con: Yêu Tinh, Nấm Độc, Bộ Xương)
         List<Enemy> enemies = enemyRepo.findAll();
         Enemy enemy;
         if (enemies.isEmpty()) {
-            // Fallback nếu lỡ tay xóa DB (tạo con dummy)
             enemy = new Enemy(); enemy.setEnemyId(0); enemy.setName("Bù Nhìn");
             enemy.setHp(100); enemy.setAtk(5); enemy.setDef(0);
         } else {
-            // Random quái thật
             enemy = enemies.get(random.nextInt(enemies.size()));
         }
 
-        // Reset thông số Session
+        // Reset Session
         session.setEnemyId(enemy.getEnemyId());
         session.setEnemyName(enemy.getName());
         session.setEnemyMaxHp(enemy.getHp());
@@ -63,15 +60,15 @@ public class BattleService {
         session.setEnemyDef(enemy.getDef());
         session.setEnemySpeed(10);
 
-        // Tính chỉ số Player
+        // Tính stats (Đã fix null pointer)
         int[] stats = calculatePlayerStats(character);
-        session.setPlayerMaxHp(character.getMaxHp() + stats[3]);
-        session.setPlayerCurrentHp(session.getPlayerMaxHp()); // Hồi đầy máu
+        session.setPlayerMaxHp(character.getMaxHp() + stats[3]); // HP Bonus
+        session.setPlayerCurrentHp(session.getPlayerMaxHp());
         session.setPlayerCurrentEnergy(character.getEnergy());
         session.setCurrentTurn(0);
-        session.setQteActive(false); // Reset QTE
+        session.setQteActive(false);
 
-        sessionRepo.save(session); // Lưu xuống DB
+        sessionRepo.save(session);
 
         return buildResult(session, "Gặp " + enemy.getName() + "! Trận đấu bắt đầu.", "ONGOING");
     }
@@ -81,16 +78,15 @@ public class BattleService {
     public BattleResult processTurn(String actionType) {
         User user = getCurrentUser();
         BattleSession session = sessionRepo.findByUser_UserId(user.getUserId())
-                .orElseThrow(() -> new RuntimeException("Chưa vào trận!"));
+                .orElseThrow(() -> new RuntimeException("Chưa vào trận! Hãy gọi /start"));
 
         Character character = charRepo.findByUser_UserId(user.getUserId()).get();
         List<String> logs = new ArrayList<>();
 
-        // 1. Check kết quả trận đấu trước khi đánh
         if (session.getEnemyCurrentHp() <= 0) return handleWin(session, character);
         if (session.getPlayerCurrentHp() <= 0) return handleLoss(session);
 
-        // 2. Xử lý QTE (Đỡ đòn)
+        // A. QTE
         if (session.isQteActive()) {
             if ("BLOCK".equals(actionType)) {
                 logs.add("🛡️ ĐỠ ĐÒN THÀNH CÔNG! (0 sát thương)");
@@ -98,10 +94,10 @@ public class BattleService {
                 sessionRepo.save(session);
                 return buildResult(session, logs, "ONGOING");
             } else {
-                // Bị đánh trúng
-                int dmg = Math.max(1, session.getEnemyAtk() - calculatePlayerStats(character)[1]);
+                int def = calculatePlayerStats(character)[1];
+                int dmg = Math.max(1, session.getEnemyAtk() - def);
                 session.setPlayerCurrentHp(session.getPlayerCurrentHp() - dmg);
-                logs.add("❌ Đỡ trượt! Bị " + session.getEnemyName() + " vả " + dmg + " máu.");
+                logs.add("❌ Đỡ trượt! Bị đánh " + dmg + " máu.");
                 session.setQteActive(false);
 
                 if (session.getPlayerCurrentHp() <= 0) return handleLoss(session);
@@ -110,16 +106,18 @@ public class BattleService {
             }
         }
 
-        // 3. Logic Turn (Đánh thường)
+        // B. TURN
         session.setCurrentTurn(session.getCurrentTurn() + 1);
         int[] stats = calculatePlayerStats(character);
 
-        // PLAYER ĐÁNH
-        int dmgToEnemy = Math.max(1, stats[0] - session.getEnemyDef()); // Atk - Def
-        boolean isCrit = random.nextInt(100) < stats[2]; // Crit Rate
-        if (isCrit) {
+        // Player Attack
+        int pAtk = stats[0];
+        int pCrit = stats[2];
+        int dmgToEnemy = Math.max(1, pAtk - session.getEnemyDef());
+
+        if (random.nextInt(100) < pCrit) {
             dmgToEnemy = (int)(dmgToEnemy * 1.5);
-            logs.add("💥 BẠO KÍCH! Bạn gây " + dmgToEnemy + " sát thương.");
+            logs.add("💥 BẠO KÍCH! Gây " + dmgToEnemy + " sát thương.");
         } else {
             logs.add("⚔️ Tấn công gây " + dmgToEnemy + " sát thương.");
         }
@@ -130,22 +128,21 @@ public class BattleService {
             return handleWin(session, character);
         }
 
-        // ENEMY ĐÁNH TRẢ (30% ra QTE)
+        // Enemy Attack
         if (random.nextInt(100) < 30) {
             session.setQteActive(true);
             session.setQteExpiryTime(LocalDateTime.now().plusSeconds(2));
-            logs.add("⚠️ " + session.getEnemyName() + " tung tuyệt chiêu! ĐỠ NGAY!");
+            logs.add("⚠️ " + session.getEnemyName() + " tung chiêu! ĐỠ NGAY!");
             sessionRepo.save(session);
-
             BattleResult res = buildResult(session, logs, "QTE_ACTION");
             res.setQteTriggered(true);
             return res;
         }
 
-        // Enemy đánh thường
-        int dmgToPlayer = Math.max(1, session.getEnemyAtk() - stats[1]);
+        int pDef = stats[1];
+        int dmgToPlayer = Math.max(1, session.getEnemyAtk() - pDef);
         session.setPlayerCurrentHp(session.getPlayerCurrentHp() - dmgToPlayer);
-        logs.add("👾 " + session.getEnemyName() + " cào nhẹ " + dmgToPlayer + " máu.");
+        logs.add("👾 " + session.getEnemyName() + " đánh trả " + dmgToPlayer + " máu.");
 
         if (session.getPlayerCurrentHp() <= 0) return handleLoss(session);
 
@@ -153,25 +150,46 @@ public class BattleService {
         return buildResult(session, logs, "ONGOING");
     }
 
-    // --- BRIDGE METHOD CHO CONTROLLER ---
+    // --- HELPER FIX NULL POINTER ---
+    private int[] calculatePlayerStats(Character c) {
+        List<UserItem> items = userItemRepo.findByUser_UserIdAndIsEquippedTrue(c.getUser().getUserId());
+        int atk = c.getBaseAtk();
+        int def = c.getBaseDef();
+        int crit = c.getBaseCritRate();
+        int hpBonus = 0;
+
+        for (UserItem ui : items) {
+            Item item = ui.getItem();
+            if (item != null) {
+                // [FIX] Kiểm tra null trước khi cộng
+                atk += (item.getAtkBonus() != null) ? item.getAtkBonus() : 0;
+                def += (item.getDefBonus() != null) ? item.getDefBonus() : 0;
+                crit += (item.getCritRateBonus() != null) ? item.getCritRateBonus() : 0;
+                hpBonus += (item.getHpBonus() != null) ? item.getHpBonus() : 0;
+            }
+        }
+        return new int[]{atk, def, crit, hpBonus};
+    }
+
+    // --- OTHER HELPERS ---
     @Transactional
     public BattleResult attackEnemy(Map<String, Object> payload) {
         return processTurn("ATTACK");
     }
 
-    public List<Skill> getAllSkills() { return new ArrayList<>(); }
+    private User getCurrentUser() {
+        return userRepo.findByUsername(SecurityContextHolder.getContext().getAuthentication().getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
 
-    // --- PRIVATE HELPERS ---
     private BattleResult handleWin(BattleSession session, Character character) {
-        BattleResult res = buildResult(session, "🏆 Đã tiêu diệt " + session.getEnemyName() + "!", "VICTORY");
-
-        // Lấy thông tin quái gốc để tính thưởng
+        BattleResult res = buildResult(session, "🏆 Chiến thắng!", "VICTORY");
         Enemy enemyRef = enemyRepo.findById(session.getEnemyId()).orElse(null);
+
         int exp = (enemyRef != null) ? enemyRef.getExpReward() : 10;
         int gold = (enemyRef != null) ? enemyRef.getGoldReward() : 10;
 
         character.setExp(character.getExp() + exp);
-        // Level Up Logic
         if (character.getExp() >= character.getLv() * 100L) {
             character.setExp(character.getExp() - (int)(character.getLv() * 100L));
             character.setLv(character.getLv() + 1);
@@ -179,14 +197,12 @@ public class BattleService {
             res.setLevelUp(true);
         }
 
-        // Cộng vàng
         Wallet w = walletRepo.findByUser_UserId(character.getUser().getUserId()).orElse(null);
         if (w != null) {
             w.setGold(w.getGold().add(BigDecimal.valueOf(gold)));
             walletRepo.save(w);
         }
 
-        // Cập nhật HP thật cho nhân vật sau trận
         character.setHp(Math.max(1, session.getPlayerCurrentHp()));
         charRepo.save(character);
 
@@ -195,67 +211,45 @@ public class BattleService {
 
         handleNewItemDrop(character.getUser(), res.getCombatLog(), res, (enemyRef != null ? enemyRef.getLevel() : 1));
 
-        // Xóa session sau khi thắng
         sessionRepo.delete(session);
         return res;
     }
 
     private BattleResult handleLoss(BattleSession session) {
-        BattleResult res = buildResult(session, "💀 Bạn đã bị đánh bại...", "DEFEAT");
+        BattleResult res = buildResult(session, "💀 Thất bại...", "DEFEAT");
         Character c = charRepo.findByUser_UserId(session.getUser().getUserId()).get();
-        c.setHp(1); // Về làng với 1 máu
-        charRepo.save(c);
-        sessionRepo.delete(session);
+        c.setHp(1); charRepo.save(c); sessionRepo.delete(session);
         return res;
     }
 
     private BattleResult buildResult(BattleSession s, List<String> logs, String status) {
         BattleResult res = new BattleResult();
-        res.setEnemyId(s.getEnemyId());
-        res.setEnemyName(s.getEnemyName());
-        res.setEnemyHp(s.getEnemyCurrentHp());
-        res.setEnemyMaxHp(s.getEnemyMaxHp());
-        res.setPlayerHp(s.getPlayerCurrentHp());
-        res.setPlayerMaxHp(s.getPlayerMaxHp());
-        res.setPlayerEnergy(s.getPlayerCurrentEnergy());
-        res.setCombatLog(logs);
-        res.setStatus(status);
+        res.setEnemyId(s.getEnemyId()); res.setEnemyName(s.getEnemyName());
+        res.setEnemyHp(s.getEnemyCurrentHp()); res.setEnemyMaxHp(s.getEnemyMaxHp());
+        res.setPlayerHp(s.getPlayerCurrentHp()); res.setPlayerMaxHp(s.getPlayerMaxHp());
+        res.setPlayerEnergy(s.getPlayerCurrentEnergy()); res.setCombatLog(logs); res.setStatus(status);
         return res;
     }
-
     private BattleResult buildResult(BattleSession s, String msg, String status) {
-        List<String> logs = new ArrayList<>(); logs.add(msg);
-        return buildResult(s, logs, status);
+        List<String> logs = new ArrayList<>(); logs.add(msg); return buildResult(s, logs, status);
     }
 
-    private int[] calculatePlayerStats(Character c) {
-        List<UserItem> items = userItemRepo.findByUser_UserIdAndIsEquippedTrue(c.getUser().getUserId());
-        int atk = c.getBaseAtk(); int def = c.getBaseDef(); int crit = c.getBaseCritRate(); int hpBonus = 0;
-        for (UserItem ui : items) {
-            atk += ui.getItem().getAtkBonus(); def += ui.getItem().getDefBonus();
-            crit += ui.getItem().getCritRateBonus(); hpBonus += ui.getItem().getHpBonus();
-        }
-        return new int[]{atk, def, crit, hpBonus};
-    }
-
-    private User getCurrentUser() {
-        return userRepo.findByUsername(SecurityContextHolder.getContext().getAuthentication().getName())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-    }
-
-    // Drop Item Logic (Giữ nguyên)
     private void handleNewItemDrop(User user, List<String> logs, BattleResult result, int enemyLv) {
         if (random.nextDouble() > DROP_RATE) return;
         String type = Arrays.asList("WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "NECKLACE").get(random.nextInt(6));
-        String rarity = (random.nextInt(100) < 20) ? "A" : "C"; // Demo tỉ lệ
+        String rarity = (random.nextInt(100) < 20) ? "A" : "C";
         Item item = new Item();
         item.setUser(user); item.setType(type); item.setRarity(rarity); item.setName(rarity + " " + type);
         item.setBasePrice(BigDecimal.valueOf(100));
-        item.setImageUrl("s_sword_0.png"); // Placeholder
+        item.setImageUrl("s_sword_0.png");
+        // Init stats để không bị null lần sau
+        item.setAtkBonus(0); item.setDefBonus(0); item.setHpBonus(0); item.setCritRateBonus(0); item.setSpeedBonus(0); item.setEnergyBonus(0);
         itemRepo.save(item);
         UserItem ui = new UserItem(); ui.setUser(user); ui.setItem(item); ui.setQuantity(1);
         userItemRepo.save(ui);
         logs.add("🎁 Nhặt được: " + item.getName());
         result.setDroppedItemName(item.getName()); result.setDroppedItemImage(item.getImageUrl()); result.setDroppedItemRarity(rarity);
     }
+
+    public List<Skill> getAllSkills() { return new ArrayList<>(); }
 }
