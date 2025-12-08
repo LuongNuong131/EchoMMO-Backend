@@ -6,11 +6,11 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "flavor_text")
-public class FlavorText {
+@Table(name = "weather_text")
+public class WeatherText {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer ftId;
+    private Integer wtId;
 
     @Column(nullable = false)
     private String content;

@@ -1,6 +1,7 @@
 package com.echommo.repository;
 
 import com.echommo.entity.Item;
+import com.echommo.entity.User; // [FIX] Nhớ import User
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;
@@ -21,4 +22,8 @@ public interface ItemRepository extends JpaRepository<Item, Integer> {
     // [MỚI] 2. Tìm Item cùng loại đang được mặc bởi User
     // Dùng cho logic gỡ/mặc trang bị: tìm Item liên kết với User, có cùng Type, và IsEquipped = true.
     Item findByUser_UserIdAndTypeAndIsEquippedTrue(Integer userId, String type);
+
+    // [FIX] 3. Xóa tất cả Item thuộc về User
+    // Dùng để xử lý lỗi Foreign Key khi xóa User
+    void deleteByUser(User user);
 }

@@ -5,6 +5,7 @@ import com.echommo.entity.Character;
 import com.echommo.entity.*;
 import com.echommo.repository.*;
 import com.echommo.enums.CharacterStatus;
+import com.echommo.enums.Role; // [ADD] Import Role
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -60,13 +61,35 @@ public class CharacterService {
         Character c = new Character();
         c.setUser(u);
         c.setName(req.getName());
-        c.setLv(1); c.setHp(100); c.setMaxHp(100);
-        c.setEnergy(50); c.setMaxEnergy(50);
-        c.setBaseAtk(10); c.setBaseDef(5); c.setBaseSpeed(10);
-        c.setBaseCritRate(5); c.setBaseCritDmg(150);
+        c.setLv(1);
+
+        // --- [FIX] CHECK ROLE ĐỂ SET CHỈ SỐ GỐC ---
+        if (u.getRole() == Role.ADMIN) {
+            // Admin: Full 999
+            c.setHp(9999); c.setMaxHp(9999); // Máu trâu hơn chút
+            c.setEnergy(999); c.setMaxEnergy(999);
+
+            c.setBaseAtk(999);
+            c.setBaseDef(999);
+            c.setBaseSpeed(999);
+            c.setBaseCritRate(100);  // Admin chắc 100% crit luôn cho oách? Hoặc để 999 tùy bạn
+            c.setBaseCritDmg(300);   // 300% crit dmg
+        } else {
+            // User thường: Gốc = 0
+            c.setHp(100); c.setMaxHp(100);
+            c.setEnergy(50); c.setMaxEnergy(50);
+
+            c.setBaseAtk(0);
+            c.setBaseDef(0);
+            c.setBaseSpeed(0);
+            c.setBaseCritRate(1);
+            c.setBaseCritDmg(150);
+        }
+
         c.setStatus(CharacterStatus.IDLE);
         c = charRepo.save(c);
 
+        // Tặng đồ tân thủ (Admin cũng tặng luôn cho vui)
         for(String n : Arrays.asList("Kiếm Gỗ", "Áo Vải", "Bình Máu")) {
             Optional<Item> i = itemRepo.findByName(n);
             if(i.isPresent()) {

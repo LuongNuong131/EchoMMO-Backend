@@ -28,23 +28,28 @@ public class Character {
     @Column(name = "current_exp")
     private Integer exp = 0;
 
-    // Stats
+    // --- [FIX] SET GỐC VỀ 0 ---
     @Column(name = "base_atk")
-    private Integer baseAtk = 10;
-    @Column(name = "base_def")
-    private Integer baseDef = 5;
-    @Column(name = "base_speed")
-    private Integer baseSpeed = 10;
-    @Column(name = "base_crit_rate")
-    private Integer baseCritRate = 5;
-    @Column(name = "base_crit_dmg")
-    private Integer baseCritDmg = 150;
+    private Integer baseAtk = 0;       // Gốc 0
 
-    // HP & Energy
+    @Column(name = "base_def")
+    private Integer baseDef = 0;       // Gốc 0
+
+    @Column(name = "base_speed")
+    private Integer baseSpeed = 0;     // Gốc 0
+
+    @Column(name = "base_crit_rate")
+    private Integer baseCritRate = 1;  // Gốc 1%
+
+    @Column(name = "base_crit_dmg")
+    private Integer baseCritDmg = 150; // Gốc 150%
+
+    // HP & Energy (Nên để tối thiểu để nhân vật không chết ngay khi tháo đồ)
     @Column(name = "max_hp")
     private Integer maxHp = 100;
     @Column(name = "current_hp")
     private Integer hp = 100;
+
     @Column(name = "max_energy")
     private Integer maxEnergy = 50;
     @Column(name = "current_energy")
@@ -53,7 +58,6 @@ public class Character {
     @Column(name = "current_location")
     private String currentLocation = "Làng Tân Thủ";
 
-    // Trạng thái nhân vật (Mới)
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private CharacterStatus status = CharacterStatus.IDLE;

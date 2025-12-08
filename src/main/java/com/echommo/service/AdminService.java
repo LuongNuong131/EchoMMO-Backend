@@ -36,7 +36,20 @@ public class AdminService {
     }
 
     public void deleteItem(Integer id) { itemRepo.deleteById(id); }
-    public void deleteUser(Integer id) { userRepo.deleteById(id); }
+
+    // [FIX] Cập nhật hàm xóa User: Xóa Item con trước rồi mới xóa User cha
+    @Transactional
+    public void deleteUser(Integer id) {
+        // 1. Tìm user trước, nếu không thấy thì báo lỗi luôn
+        User u = userRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
+
+        // 2. Xóa các Item do user này tạo (Đây là nguyên nhân gây lỗi FK cứng đầu)
+        itemRepo.deleteByUser(u);
+
+        // 3. Cuối cùng mới xóa User (Lúc này các bảng khác có cascade chuẩn sẽ tự xóa theo)
+        userRepo.delete(u);
+    }
+
     public void deleteListing(Integer id) { listingRepo.deleteById(id); }
 
     // [FIX] Ban User
