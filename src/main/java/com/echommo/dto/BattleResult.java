@@ -7,30 +7,28 @@ import java.util.List;
 
 @Data
 public class BattleResult {
-    private Enemy enemy;
+    // Thông tin hiển thị cơ bản
     private Integer playerHp;
     private Integer playerMaxHp;
-
-    // [FIX] Thêm dòng này để sửa lỗi cannot find symbol (như bạn yêu cầu)
     private Integer playerEnergy;
 
+    private Integer enemyId; // [NEW] Chỉ trả về ID để FE render ảnh
+    private String enemyName;
     private Integer enemyHp;
     private Integer enemyMaxHp;
 
     private List<String> combatLog = new ArrayList<>();
-    private String status; // ONGOING, VICTORY, DEFEAT, DIED
+    private String status; // ONGOING, VICTORY, DEFEAT, QTE_ACTION
+
+    // [NEW] Cờ báo hiệu QTE
+    private boolean qteTriggered; // True: Hiện nút Đỡ đòn
+    private double qteDuration;   // Thời gian tồn tại nút (ms)
 
     private Integer goldEarned = 0;
     private Integer expEarned = 0;
-
-    // Field quan trọng để Frontend hiện popup Level Up
     private boolean levelUp = false;
 
-    // Field để báo lỗi nếu có (VD: Hết lượt, lỗi mạng)
-    private boolean error = false;
-    private String message; // Message ngắn gọn cho Log
-
-    // [FIX] Thêm các field này để BattleService có thể set thông tin item rơi ra mà không bị lỗi
+    // Item drop
     private String droppedItemName;
     private String droppedItemImage;
     private String droppedItemRarity;

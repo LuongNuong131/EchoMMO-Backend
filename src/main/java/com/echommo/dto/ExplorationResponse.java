@@ -10,17 +10,16 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ExplorationResponse {
     private String message;
-    private String type;
-    private BigDecimal goldGained;
+    private String type;       // NOTHING, GOLD, ITEM, COMBAT, REST...
+    private BigDecimal goldGained; // Tổng vàng nhận được (Base + Event)
 
-    // [FIX 1] Thiếu trường EXP hiện tại (Type match Integer/Long)
-    // Sửa để khớp với Integer từ character.getExp()
     private Integer currentExp;
-
     private Integer currentLv;
     private Integer currentEnergy;
     private Integer maxEnergy;
-
-    // [FIX 2] Thiếu trường Level mới (Tham số thứ 8)
     private Integer newLevel;
+
+    // [NEW] Thêm 2 trường này để Frontend hiển thị popup nhận quà
+    private String rewardName;   // Ví dụ: "Túi vàng", "Gỗ", "Kiếm cùn"
+    private Integer rewardAmount; // Ví dụ: 50, 1, 1
 }

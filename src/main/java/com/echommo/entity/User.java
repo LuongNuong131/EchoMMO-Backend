@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @Entity
@@ -41,7 +40,6 @@ public class User {
 
     @Column(name = "banned_at")
     private LocalDateTime bannedAt;
-    // ----------------------
 
     // --- CAPTCHA FIELDS ---
     @Column(name = "is_captcha_locked")
@@ -61,7 +59,7 @@ public class User {
     private LocalDateTime otpExpiry;
 
     @Column(name = "avatar_url")
-    private String avatarUrl = "🐲"; // Icon mặc định
+    private String avatarUrl = "🐲";
 
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
@@ -69,10 +67,10 @@ public class User {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
+    // [FIX QUAN TRỌNG] Thêm fetch = FetchType.EAGER để luôn load ví khi query user
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private Wallet wallet;
 
-    // --- [MỚI] LIÊN KẾT CHARACTER STATS ---
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Character character;
 }
