@@ -4,7 +4,7 @@ import com.echommo.service.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod; // [THÊM]
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -61,11 +61,15 @@ public class SecurityConfig {
                 }))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // [FIX] Cho phép method OPTIONS đi qua (Pre-flight request)
+                        // Cho phép method OPTIONS đi qua (Pre-flight request cho CORS)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/test/**").permitAll()
+
+                        // [THÊM] Cho phép gọi API báo cáo lỗi mà không bị chặn
+                        .requestMatchers("/api/report/**").permitAll()
+
                         .requestMatchers("/images/**", "/assets/**", "/*.html", "/*.js", "/*.css").permitAll()
                         .anyRequest().authenticated()
                 );
