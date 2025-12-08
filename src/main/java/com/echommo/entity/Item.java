@@ -1,57 +1,58 @@
 package com.echommo.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore; // [THÊM IMPORT NÀY]
+import com.echommo.enums.Rarity;
+import com.echommo.enums.SlotType;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
-@Data
 @Entity
 @Table(name = "items")
+@Data
 public class Item {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "item_id")
     private Integer itemId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    @JsonIgnore // [FIX QUAN TRỌNG] Thêm dòng này để chặn lỗi Serialization
-    private User user; // Null nếu là đồ hệ thống
-
+    @Column(nullable = false)
     private String name;
+
     private String description;
-    private String type;
-    private String rarity;
+
+    @Column(nullable = false)
+    private String type; // WEAPON, ARMOR, CONSUMABLE...
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "slot_type")
+    private SlotType slotType;
+
+    private Integer tier;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rarity_default")
+    private Rarity rarityDefault;
 
     @Column(name = "base_price")
     private BigDecimal basePrice;
 
     @Column(name = "image_url")
-    private String imageUrl;
+    private String imageUrl; // Lưu tên file, vd: "s_sword_0"
 
     @Column(name = "is_system_item")
-    private Boolean isSystemItem = false;
+    private Boolean isSystemItem;
 
-    @Column(name = "is_equipped")
-    private Boolean isEquipped = false;
-
-    // Stats Bonus
+    // Base Stats (Hiển thị cho shop/item gốc)
     @Column(name = "atk_bonus")
-    private Integer atkBonus = 0;
+    private Integer atkBonus;
 
     @Column(name = "def_bonus")
-    private Integer defBonus = 0;
+    private Integer defBonus;
 
     @Column(name = "hp_bonus")
-    private Integer hpBonus = 0;
+    private Integer hpBonus;
 
-    @Column(name = "energy_bonus")
-    private Integer energyBonus = 0;
-
-    @Column(name = "speed_bonus")
-    private Integer speedBonus = 0;
-
-    @Column(name = "crit_rate_bonus")
-    private Integer critRateBonus = 0;
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
 }

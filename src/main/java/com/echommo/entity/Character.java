@@ -1,64 +1,71 @@
 package com.echommo.entity;
 
-import com.echommo.enums.CharacterStatus;
+import com.echommo.enums.CharacterStatus; // Giữ nguyên enum cũ của bạn nếu có
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 
-@Data
 @Entity
 @Table(name = "characters")
+@Data
 public class Character {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "char_id")
     private Integer charId;
 
-    @Column(unique = true, nullable = false)
-    private String name;
-
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnore
     private User user;
 
-    @Column(name = "level")
-    private Integer lv = 1;
+    @Column(nullable = false, unique = true)
+    private String name;
+
+    private Integer level;
 
     @Column(name = "current_exp")
-    private Integer exp = 0;
+    private Integer currentExp;
 
-    // --- [FIX] SET GỐC VỀ 0 ---
-    @Column(name = "base_atk")
-    private Integer baseAtk = 0;       // Gốc 0
+    // --- Attribute Points (Mới) ---
+    @Column(name = "stat_points")
+    private Integer statPoints;
 
-    @Column(name = "base_def")
-    private Integer baseDef = 0;       // Gốc 0
+    private Integer str;
+    private Integer vit;
+    private Integer agi;
 
-    @Column(name = "base_speed")
-    private Integer baseSpeed = 0;     // Gốc 0
-
-    @Column(name = "base_crit_rate")
-    private Integer baseCritRate = 1;  // Gốc 1%
-
-    @Column(name = "base_crit_dmg")
-    private Integer baseCritDmg = 150; // Gốc 150%
-
-    // HP & Energy (Nên để tối thiểu để nhân vật không chết ngay khi tháo đồ)
-    @Column(name = "max_hp")
-    private Integer maxHp = 100;
+    // --- Snapshot Stats ---
     @Column(name = "current_hp")
-    private Integer hp = 100;
+    private Integer currentHp;
+
+    @Column(name = "max_hp")
+    private Integer maxHp;
+
+    @Column(name = "current_energy")
+    private Integer currentEnergy;
 
     @Column(name = "max_energy")
-    private Integer maxEnergy = 50;
-    @Column(name = "current_energy")
-    private Integer energy = 50;
+    private Integer maxEnergy;
+
+    // Base Stats
+    @Column(name = "base_atk")
+    private Integer baseAtk;
+
+    @Column(name = "base_def")
+    private Integer baseDef;
+
+    @Column(name = "base_speed")
+    private Integer baseSpeed;
+
+    @Column(name = "base_crit_rate")
+    private Integer baseCritRate;
+
+    @Column(name = "base_crit_dmg")
+    private Integer baseCritDmg;
 
     @Column(name = "current_location")
-    private String currentLocation = "Làng Tân Thủ";
+    private String currentLocation;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status")
-    private CharacterStatus status = CharacterStatus.IDLE;
+    // Giữ các field cũ nếu logic game cũ cần, nhưng map với DB mới thì nhiêu đây là đủ core.
 }

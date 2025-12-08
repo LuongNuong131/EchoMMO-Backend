@@ -1,133 +1,102 @@
 package com.echommo.service;
 
-import com.echommo.entity.Character;
-import com.echommo.entity.Item;
 import com.echommo.entity.UserItem;
-import com.echommo.enums.Role; // [ADD] Import Role
-import com.echommo.repository.CharacterRepository;
 import com.echommo.repository.UserItemRepository;
-import com.echommo.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.echommo.service.ItemGenerationService.SubStatDTO;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Random;
 
 @Service
+@RequiredArgsConstructor
 public class InventoryService {
 
-    @Autowired
-    private UserItemRepository userItemRepo;
+    private final UserItemRepository userItemRepository;
+    private final ItemGenerationService itemGenService; // Gọi thằng bên kia sang
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Random random = new Random();
 
-    @Autowired
-    private UserRepository userRepo;
+    private static final int MAX_LEVEL = 30;
+    private static final int JUMP_INTERVAL = 3; // MỐC NHẢY: 3, 6, 9... 30 (10 lần)
+    private static final int MAX_SUB_STATS = 4;
 
-    @Autowired
-    private CharacterRepository charRepo;
-
-    // Lấy danh sách đồ
-    public List<UserItem> getInventory(Integer userId) {
-        return userItemRepo.findByUser_UserId(userId);
-    }
-
-    // --- MẶC ĐỒ ---
     @Transactional
-    public void equipItem(Integer userId, Integer userItemId) {
-        UserItem newItem = userItemRepo.findById(userItemId)
+    public UserItem enhanceItem(Long userItemId) {
+        UserItem item = userItemRepository.findById(userItemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
-        if (!newItem.getUser().getUserId().equals(userId)) {
-            throw new RuntimeException("This item does not belong to you!");
+        if (item.getEnhanceLevel() >= MAX_LEVEL) {
+            throw new RuntimeException("Max level reached!");
         }
 
-        String itemType = newItem.getItem().getType();
-        Optional<UserItem> currentEquipped = userItemRepo
-                .findByUser_UserIdAndItem_TypeAndIsEquippedTrue(userId, itemType);
+        // 1. Trừ tiền/nguyên liệu (Logic này mày tự thêm sau, giờ cứ cho đập free để test)
 
-        if (currentEquipped.isPresent()) {
-            UserItem oldItem = currentEquipped.get();
-            if (!oldItem.getUserItemId().equals(newItem.getUserItemId())) {
-                oldItem.setIsEquipped(false);
-                userItemRepo.save(oldItem);
-            }
+        // 2. Tăng cấp
+        int newLevel = item.getEnhanceLevel() + 1;
+        item.setEnhanceLevel(newLevel);
+
+        // 3. Tăng Main Stat (Tăng nhẹ mỗi cấp)
+        increaseMainStat(item);
+
+        // 4. CHECKPOINT: Nếu chia hết cho 3 thì NHẢY SỐ (RNG Moment)
+        if (newLevel % JUMP_INTERVAL == 0) {
+            applyStatJump(item);
         }
 
-        newItem.setIsEquipped(true);
-        userItemRepo.save(newItem);
-
-        recalculateCharacterStats(userId);
+        return userItemRepository.save(item);
     }
 
-    // --- THÁO ĐỒ ---
-    @Transactional
-    public void unequipItem(Integer userId, Integer userItemId) {
-        UserItem item = userItemRepo.findById(userItemId)
-                .orElseThrow(() -> new RuntimeException("Item not found"));
+    private void applyStatJump(UserItem item) {
+        try {
+            // Parse JSON cũ ra List
+            List<SubStatDTO> stats = new ArrayList<>();
+            if (item.getSubStats() != null && !item.getSubStats().isEmpty()) {
+                stats = objectMapper.readValue(item.getSubStats(), new TypeReference<List<SubStatDTO>>() {});
+            }
 
-        if (!item.getUser().getUserId().equals(userId)) {
-            throw new RuntimeException("Not your item");
+            // CASE A: Chưa đủ 4 dòng -> Mở dòng mới (New Substat)
+            // (Giống E7: Kiếm tím +12 mới full 4 dòng, +15 nhảy vào dòng cũ)
+            if (stats.size() < MAX_SUB_STATS) {
+                SubStatDTO newStat = itemGenService.generateRandomSubStat(item, stats);
+                stats.add(newStat);
+            }
+            // CASE B: Đã đủ 4 dòng -> Cộng dồn vào 1 dòng ngẫu nhiên (Enhance Substat)
+            else {
+                // Random chọn 1 trong 4 dòng
+                int index = random.nextInt(stats.size());
+                SubStatDTO target = stats.get(index);
+
+                // Roll giá trị cộng thêm (Min-Max RNG)
+                double bonus = itemGenService.getEnhanceRollValue(target.getType(), item.getItem().getTier());
+                target.setValue(target.getValue() + bonus);
+            }
+
+            // Save ngược lại vào JSON
+            item.setSubStats(objectMapper.writeValueAsString(stats));
+
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi RNG: " + e.getMessage());
         }
-
-        item.setIsEquipped(false);
-        userItemRepo.save(item);
-
-        recalculateCharacterStats(userId);
     }
 
-    // --- LOGIC TÍNH CHỈ SỐ (CHECK ROLE ADMIN) ---
-    private void recalculateCharacterStats(Integer userId) {
-        Character character = charRepo.findByUser_UserId(userId)
-                .orElseThrow(() -> new RuntimeException("Character not found"));
-
-        // [FIX] KIỂM TRA ROLE ADMIN
-        boolean isAdmin = character.getUser().getRole() == Role.ADMIN;
-
-        // 1. Xác định mốc khởi điểm (Base)
-        int totalAtk = isAdmin ? 999 : 0;
-        int totalDef = isAdmin ? 999 : 0;
-        int totalSpeed = isAdmin ? 999 : 0;
-        int totalCritRate = isAdmin ? 100 : 1;    // Admin 100% crit
-        int totalCritDmg = isAdmin ? 300 : 150;   // Admin 300% crit dmg
-
-        int totalMaxHp = isAdmin ? 9999 : 100;    // Admin máu trâu
-        int totalMaxEnergy = isAdmin ? 999 : 50;
-
-        // 2. Cộng dồn đồ đang mặc
-        List<UserItem> inventory = userItemRepo.findByUser_UserId(userId);
-
-        for (UserItem ui : inventory) {
-            if (Boolean.TRUE.equals(ui.getIsEquipped())) {
-                Item item = ui.getItem();
-
-                if (item.getAtkBonus() != null) totalAtk += item.getAtkBonus();
-                if (item.getDefBonus() != null) totalDef += item.getDefBonus();
-                if (item.getSpeedBonus() != null) totalSpeed += item.getSpeedBonus();
-                if (item.getCritRateBonus() != null) totalCritRate += item.getCritRateBonus();
-
-                if (item.getHpBonus() != null) totalMaxHp += item.getHpBonus();
-                if (item.getEnergyBonus() != null) totalMaxEnergy += item.getEnergyBonus();
-            }
+    private void increaseMainStat(UserItem item) {
+        // Tăng 2% giá trị gốc mỗi cấp (Ví dụ)
+        if (item.getMainStatValue() != null) {
+            BigDecimal current = item.getMainStatValue();
+            BigDecimal increase = current.multiply(new BigDecimal("0.02"));
+            item.setMainStatValue(current.add(increase));
         }
+    }
 
-        // 3. Update vào DB
-        character.setBaseAtk(totalAtk);
-        character.setBaseDef(totalDef);
-        character.setBaseSpeed(totalSpeed);
-        character.setBaseCritRate(totalCritRate);
-        character.setBaseCritDmg(totalCritDmg);
-
-        character.setMaxHp(totalMaxHp);
-        character.setMaxEnergy(totalMaxEnergy);
-
-        // 4. Fix tràn máu
-        if (character.getHp() > character.getMaxHp()) {
-            character.setHp(character.getMaxHp());
-        }
-        if (character.getEnergy() > character.getMaxEnergy()) {
-            character.setEnergy(character.getMaxEnergy());
-        }
-
-        charRepo.save(character);
+    // Hàm lấy danh sách item (để controller gọi)
+    public List<UserItem> getInventory(Long userId) {
+        return userItemRepository.findByUser_UserId(userId);
     }
 }
