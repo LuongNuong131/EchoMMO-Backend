@@ -11,9 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 @Service
 public class ExplorationService {
@@ -29,12 +27,13 @@ public class ExplorationService {
     @Autowired private FlavorTextRepository flavorTextRepo;
     @Autowired private WeatherTextRepository weatherTextRepo;
 
+    // --- 1. TÍNH NĂNG THÁM HIỂM (HÀNH TẨU) ---
     @Transactional
     public ExplorationResponse explore() {
         try {
             Character c = characterService.getMyCharacter();
 
-            // 1. [AUTO-CREATE] Nếu chưa có nhân vật, tạo ngay
+            // [AUTO-CREATE] Nếu chưa có nhân vật, tạo ngay
             if (c == null) {
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 User user = userRepository.findByUsername(username)
@@ -43,24 +42,21 @@ public class ExplorationService {
             }
             if (c == null) throw new RuntimeException("Lỗi dữ liệu nhân vật.");
 
-            // 2. Check Anti-cheat
+            // Check Anti-cheat
             captchaService.checkLockStatus(c.getUser());
 
-            // 3. [UPDATE] Bỏ logic trừ Energy (Grinding Free)
+            // [UPDATE] Bỏ logic trừ Energy (Grinding Free)
             // if (c.getEnergy() < 2) { ... } -> Đã xóa
 
             Random r = new Random();
 
             // --- A. PHẦN THƯỞNG CỐ ĐỊNH (BASE REWARD) ---
-            // Luôn nhận được 1 ít Exp và Vàng lẻ mỗi bước chân
             int baseExp = 1 + (c.getLv() / 2);
             int baseCoin = 1 + r.nextInt(3); // 1-3 vàng
 
-            // Cộng vào Character/Wallet ngay
             c.setExp(c.getExp() + baseExp);
 
             Wallet w = c.getUser().getWallet();
-            // Cộng dồn vàng (Dùng getGold/setGold theo đúng Entity Wallet của bạn)
             BigDecimal currentGold = w.getGold() != null ? w.getGold() : BigDecimal.ZERO;
             w.setGold(currentGold.add(BigDecimal.valueOf(baseCoin)));
 
@@ -70,13 +66,12 @@ public class ExplorationService {
             String msg;
             String rewardName = null;
             Integer rewardAmount = 0;
-            BigDecimal eventGold = BigDecimal.ZERO; // Vàng từ sự kiện (nếu có)
+            BigDecimal eventGold = BigDecimal.ZERO;
 
             if (roll < 45) {
-                // 45%: Flavor Text / Weather (Không có quà thêm)
+                // 45%: Flavor Text / Weather
                 type = "TEXT";
-                boolean isWeather = r.nextBoolean(); // 50/50
-                // Dùng orElse để tránh lỗi nếu DB chưa có dữ liệu text
+                boolean isWeather = r.nextBoolean();
                 if (isWeather) {
                     msg = weatherTextRepo.findRandomContent().orElse("Gió thổi hiu hiu, lá bay xào xạc...");
                 } else {
@@ -84,20 +79,17 @@ public class ExplorationService {
                 }
 
             } else if (roll < 55) {
-                // 10%: Big Gold (Túi vàng)
+                // 10%: Big Gold
                 type = "GOLD";
                 int bigGold = 10 + r.nextInt(41); // 10 - 50 vàng
                 eventGold = BigDecimal.valueOf(bigGold);
-
-                // Cộng thêm vào ví
                 w.setGold(w.getGold().add(eventGold));
-
                 msg = "Bạn đá phải một cái túi nặng trịch. Bên trong là " + bigGold + " Vàng!";
                 rewardName = "Túi vàng";
                 rewardAmount = bigGold;
 
             } else if (roll < 75) {
-                // 20%: Item Drop (Tài nguyên theo Map)
+                // 20%: Item Drop
                 type = "ITEM";
                 Item droppedItem = getResourceByMapLevel(c.getLv(), r);
 
@@ -107,31 +99,26 @@ public class ExplorationService {
                     rewardName = droppedItem.getName();
                     rewardAmount = 1;
                 } else {
-                    type = "TEXT"; // Fallback nếu không tìm thấy item trong DB
+                    type = "TEXT";
                     msg = "Bạn thấy lấp lánh nhưng chỉ là hòn đá cuội.";
                 }
 
             } else {
-                // 25%: Combat (Gặp quái)
+                // 25%: Combat
                 type = "COMBAT";
                 msg = "Sát khí đằng đằng! Quái vật xuất hiện.";
                 c.setStatus(CharacterStatus.IN_COMBAT);
-                // Frontend sẽ tự chuyển trang khi thấy type = COMBAT
             }
 
             // --- C. CHECK LÊN CẤP ---
             Integer newLv = null;
-            // Công thức Exp: Lv * 100 (Dễ thở hơn)
             long reqExp = (long) c.getLv() * 100L;
             if (c.getExp() >= reqExp) {
                 c.setExp(c.getExp() - (int) reqExp);
                 c.setLv(c.getLv() + 1);
-
-                // Tăng stat khi lên cấp
                 c.setMaxHp(c.getMaxHp() + 20);
                 c.setHp(c.getMaxHp());
                 c.setEnergy(c.getMaxEnergy());
-
                 newLv = c.getLv();
                 msg += " [LÊN CẤP ĐỘ " + newLv + "!]";
             }
@@ -143,7 +130,7 @@ public class ExplorationService {
             return new ExplorationResponse(
                     msg,
                     type,
-                    BigDecimal.valueOf(baseCoin).add(eventGold), // Tổng vàng hiển thị
+                    BigDecimal.valueOf(baseCoin).add(eventGold),
                     c.getExp(),
                     c.getLv(),
                     c.getEnergy(),
@@ -159,20 +146,68 @@ public class ExplorationService {
         }
     }
 
+    // --- 2. TÍNH NĂNG KHAI THÁC (GATHERING - GIỮ LẠI ĐỂ KHÔNG LỖI) ---
+    @Transactional
+    public Map<String, Object> gatherResource(String resourceType, int amount) {
+        Character c = characterService.getMyCharacter();
+        if (c == null) throw new RuntimeException("Chưa có nhân vật");
+
+        // 1. Tính toán tiêu hao (1 Năng lượng / 1 lần khai thác)
+        int energyCost = amount;
+        if (c.getEnergy() < energyCost) {
+            throw new RuntimeException("Không đủ nội năng! Cần " + energyCost);
+        }
+
+        // 2. Trừ năng lượng
+        c.setEnergy(c.getEnergy() - energyCost);
+        characterRepository.save(c);
+
+        // 3. Cộng tài nguyên vào ví
+        Wallet w = c.getUser().getWallet();
+        String msg = "";
+
+        switch (resourceType) {
+            case "wood": // Cây Sồi
+            case "special": // Gỗ Hóa Thạch
+                w.setWood(w.getWood() + amount);
+                msg = "Nhận được " + amount + " Gỗ";
+                break;
+            case "stone": // Đá Tảng
+            case "mining": // Mỏ Đồng
+                w.setStone(w.getStone() + amount);
+                msg = "Nhận được " + amount + " Đá";
+                break;
+            default:
+                throw new RuntimeException("Loại tài nguyên không hợp lệ");
+        }
+
+        walletRepository.save(w);
+
+        // 4. Trả về kết quả
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", msg);
+        result.put("currentEnergy", c.getEnergy());
+        result.put("wood", w.getWood());
+        result.put("stone", w.getStone());
+
+        return result;
+    }
+
     // --- CÁC HÀM PHỤ TRỢ ---
 
     private Item getResourceByMapLevel(int level, Random r) {
         List<String> possibleItems = new ArrayList<>();
-        possibleItems.add("Gỗ"); // Item cơ bản
+        possibleItems.add("Gỗ");
         possibleItems.add("Đá");
 
-        // Logic Drop theo Level (Map giả định)
         if (level >= 10) possibleItems.add("Quặng Đồng");
         if (level >= 20) possibleItems.add("Quặng Sắt");
         if (level >= 30) possibleItems.add("Bạch Kim");
-        // Đảm bảo tên trong DB trùng khớp chính xác với chuỗi này
 
+        // Chọn item ngẫu nhiên từ list
         String itemName = possibleItems.get(r.nextInt(possibleItems.size()));
+
+        // Tìm item trong DB
         return itemRepo.findByName(itemName).stream().findFirst().orElse(null);
     }
 
