@@ -1,5 +1,6 @@
 package com.echommo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore; // [THÊM IMPORT NÀY]
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -15,6 +16,7 @@ public class Item {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
+    @JsonIgnore // [FIX QUAN TRỌNG] Thêm dòng này để chặn lỗi Serialization
     private User user; // Null nếu là đồ hệ thống
 
     private String name;

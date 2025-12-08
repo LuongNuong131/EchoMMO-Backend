@@ -15,15 +15,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/inventory")
-// [FIX] Xóa dòng cũ, thay bằng dòng này (chấp nhận mọi nguồn):
-@CrossOrigin(origins = "*", allowedHeaders = "*")
+// [ĐÃ XÓA @CrossOrigin ĐỂ DÙNG CONFIG CHUNG]
 public class InventoryController {
 
     @Autowired private InventoryService inventoryService;
     @Autowired private UserRepository userRepository;
 
-    // ... (Phần code dưới giữ nguyên không cần sửa) ...
-
+    // Helper lấy User ID hiện tại
     private Integer getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
@@ -41,13 +39,14 @@ public class InventoryController {
             Integer userId = getCurrentUserId();
             return ResponseEntity.ok(inventoryService.getInventory(userId));
         } catch (RuntimeException e) {
+            // Trả về 401 chuẩn để frontend biết đường redirect
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error fetching inventory");
         }
     }
 
-    // ... Các hàm equip/unequip giữ nguyên ...
     @PostMapping("/equip/{userItemId}")
     public ResponseEntity<?> equipItem(@PathVariable Integer userItemId) {
         try {

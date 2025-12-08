@@ -5,6 +5,7 @@ import com.echommo.dto.AuthResponse;
 import com.echommo.dto.CharacterRequest;
 import com.echommo.entity.User;
 import com.echommo.entity.Wallet;
+import com.echommo.enums.Role; // [FIX] Thêm import này
 import com.echommo.repository.UserRepository;
 import com.echommo.security.JwtUtils;
 import com.echommo.service.CharacterService;
@@ -30,13 +31,15 @@ public class AuthController {
     @Autowired UserRepository userRepository;
     @Autowired PasswordEncoder encoder;
     @Autowired JwtUtils jwtUtils;
-    @Autowired CharacterService characterService; // <--- Inject thêm
+    @Autowired CharacterService characterService;
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@RequestBody AuthRequest loginRequest) {
-        // 1. Check User tồn tại và trạng thái Ban trước khi xác thực
+        // 1. Check User tồn tại và trạng thái Ban an toàn
         User user = userRepository.findByUsername(loginRequest.getUsername()).orElse(null);
-        if (user != null && !user.getIsActive()) {
+
+        // Chỉ chặn nếu isActive là FALSE
+        if (user != null && Boolean.FALSE.equals(user.getIsActive())) {
             Map<String, String> response = new HashMap<>();
             response.put("error", "BANNED");
             response.put("message", "Tài khoản đã bị khóa!");
@@ -52,7 +55,9 @@ public class AuthController {
         String jwt = jwtUtils.generateToken((UserDetails) authentication.getPrincipal());
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        return ResponseEntity.ok(new AuthResponse(jwt, userDetails.getUsername(), "USER"));
+        // Trả về Role dạng String cho Frontend
+        String roleStr = user != null ? user.getRole().name() : "USER";
+        return ResponseEntity.ok(new AuthResponse(jwt, userDetails.getUsername(), roleStr));
     }
 
     @PostMapping("/register")
@@ -70,30 +75,31 @@ public class AuthController {
         user.setEmail(signUpRequest.getEmail());
         user.setPasswordHash(encoder.encode(signUpRequest.getPassword()));
         user.setFullName(signUpRequest.getFullName());
-        user.setAvatarUrl("🐲"); // Avatar mặc định
+        user.setAvatarUrl("🐲");
+
+        // [FIX QUAN TRỌNG] Kích hoạt user và set Role đúng kiểu Enum
+        user.setIsActive(true);
+        user.setRole(Role.USER); // [SỬA LỖI TẠI ĐÂY]
 
         // 2. Tạo Ví
         Wallet wallet = new Wallet();
         wallet.setUser(user);
-        wallet.setGold(new BigDecimal("100.00")); // Tặng 100 vàng
+        wallet.setGold(new BigDecimal("100.00"));
         user.setWallet(wallet);
 
         userRepository.save(user);
 
-        // 3. AUTO-CREATE CHARACTER (Fix lỗi #1 & #5)
-        // Login tạm thời để có Context cho CharacterService (hoặc sửa Service để nhận User)
-        // Cách nhanh nhất: Mock context hoặc sửa CharacterService.createCharacter
-        // Ở đây ta sẽ login thủ công luôn để CharacterService lấy được current user
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(signUpRequest.getUsername(), signUpRequest.getPassword()));
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
+        // 3. AUTO-CREATE CHARACTER
         try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(signUpRequest.getUsername(), signUpRequest.getPassword()));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
             CharacterRequest charReq = new CharacterRequest();
-            charReq.setName(signUpRequest.getUsername()); // Tên nhân vật = Username mặc định
-            characterService.createCharacter(charReq); // Hàm này đã có logic tặng đồ tân thủ
+            charReq.setName(signUpRequest.getUsername());
+            characterService.createCharacter(charReq);
         } catch (Exception e) {
-            return ResponseEntity.ok("Đăng ký thành công nhưng lỗi tạo nhân vật: " + e.getMessage());
+            return ResponseEntity.ok("Đăng ký thành công (Lưu ý: " + e.getMessage() + ")");
         }
 
         return ResponseEntity.ok("Đăng ký thành công! Đã tạo nhân vật và tặng quà tân thủ.");
