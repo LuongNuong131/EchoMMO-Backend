@@ -96,7 +96,7 @@ public class InventoryService {
     }
 
     // Hàm lấy danh sách item (để controller gọi)
-    public List<UserItem> getInventory(Long userId) {
+    public List<UserItem> getInventory(Integer userId) {
         return userItemRepository.findByUser_UserId(userId);
     }
 }

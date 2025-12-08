@@ -1,37 +1,81 @@
 package com.echommo.controller;
 
 import com.echommo.dto.CreateListingRequest;
-import com.echommo.entity.Item;
 import com.echommo.entity.MarketListing;
 import com.echommo.service.MarketplaceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/market")
 public class MarketplaceController {
-    @Autowired private MarketplaceService s;
 
-    @GetMapping("/shop-items") public ResponseEntity<List<Item>> shop() { return ResponseEntity.ok(s.getShopItems()); }
-    @GetMapping("/listings") public ResponseEntity<List<MarketListing>> p2p() { return ResponseEntity.ok(s.getPlayerListings()); }
-    @GetMapping("/my-listings") public ResponseEntity<List<MarketListing>> mine() { return ResponseEntity.ok(s.getMyListings()); }
+    @Autowired private MarketplaceService service;
 
-    @PostMapping("/buy/{id}") public ResponseEntity<?> buyShop(@PathVariable Integer id, @RequestBody Map<String, Integer> b) {
-        try { return ResponseEntity.ok(s.buyItem(id, b.getOrDefault("quantity", 1))); } catch(Exception e) { return ResponseEntity.badRequest().body(e.getMessage()); }
+    @GetMapping("/shop-items")
+    public ResponseEntity<?> getShopItems() {
+        return ResponseEntity.ok(service.getShopItems());
     }
-    @PostMapping("/sell/{id}") public ResponseEntity<?> sellNPC(@PathVariable Integer id, @RequestBody Map<String, Integer> b) {
-        try { return ResponseEntity.ok(s.sellItem(id, b.getOrDefault("quantity", 1))); } catch(Exception e) { return ResponseEntity.badRequest().body(e.getMessage()); }
+
+    @GetMapping("/listings")
+    public ResponseEntity<?> getListings() {
+        return ResponseEntity.ok(service.getPlayerListings());
     }
-    @PostMapping("/create-listing") public ResponseEntity<?> create(@RequestBody CreateListingRequest r) {
-        try { return ResponseEntity.ok(s.createListing(r)); } catch(Exception e) { return ResponseEntity.badRequest().body(e.getMessage()); }
+
+    @GetMapping("/my-listings")
+    public ResponseEntity<?> getMyListings() {
+        return ResponseEntity.ok(service.getMyListings());
     }
-    @PostMapping("/cancel-listing/{id}") public ResponseEntity<?> cancel(@PathVariable Integer id) {
-        try { return ResponseEntity.ok(s.cancelListing(id)); } catch(Exception e) { return ResponseEntity.badRequest().body(e.getMessage()); }
+
+    @PostMapping("/buy-shop")
+    public ResponseEntity<?> buyFromShop(@RequestBody Map<String, Integer> body) {
+        try {
+            return ResponseEntity.ok(service.buyItem(body.get("itemId"), body.get("quantity")));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
-    @PostMapping("/buy-listing/{id}") public ResponseEntity<?> buyP2P(@PathVariable Integer id, @RequestBody Map<String, Integer> b) {
-        try { return ResponseEntity.ok(s.buyPlayerListing(id, b.getOrDefault("quantity", 1))); } catch(Exception e) { return ResponseEntity.badRequest().body(e.getMessage()); }
+
+    @PostMapping("/sell")
+    public ResponseEntity<?> sellToShop(@RequestBody Map<String, Object> body) { // [FIX] Map<String, Object> để handle Long
+        try {
+            // [FIX] Ép kiểu an toàn từ Integer/Long trong JSON sang Long
+            Long userItemId = ((Number) body.get("userItemId")).longValue();
+            Integer quantity = ((Number) body.get("quantity")).intValue();
+            return ResponseEntity.ok(service.sellItem(userItemId, quantity));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<?> createListing(@RequestBody CreateListingRequest req) {
+        try {
+            return ResponseEntity.ok(service.createListing(req));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/buy")
+    public ResponseEntity<?> buyListing(@RequestBody Map<String, Integer> body) {
+        try {
+            return ResponseEntity.ok(service.buyPlayerListing(body.get("listingId"), body.get("quantity")));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/cancel/{id}")
+    public ResponseEntity<?> cancelListing(@PathVariable Integer id) {
+        try {
+            return ResponseEntity.ok(service.cancelListing(id));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

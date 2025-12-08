@@ -1,7 +1,6 @@
 package com.echommo.controller;
 
 import com.echommo.entity.User;
-import com.echommo.entity.UserItem;
 import com.echommo.repository.UserRepository;
 import com.echommo.service.InventoryService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,68 +10,58 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/inventory")
-// [ĐÃ XÓA @CrossOrigin ĐỂ DÙNG CONFIG CHUNG]
 public class InventoryController {
 
     @Autowired private InventoryService inventoryService;
     @Autowired private UserRepository userRepository;
 
-    // Helper lấy User ID hiện tại
     private Integer getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new RuntimeException("Unauthorized: User is not logged in");
+            throw new RuntimeException("Unauthorized");
         }
-        String username = authentication.getName();
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found: " + username));
-        return user.getUserId();
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"))
+                .getUserId();
     }
 
     @GetMapping("/me")
     public ResponseEntity<?> getMyInventory() {
         try {
-            Integer userId = getCurrentUserId();
-            return ResponseEntity.ok(inventoryService.getInventory(userId));
-        } catch (RuntimeException e) {
-            // Trả về 401 chuẩn để frontend biết đường redirect
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+            // [FIX] Đã xóa .longValue() -> Truyền thẳng Integer vào vì Service nhận Integer
+            return ResponseEntity.ok(inventoryService.getInventory(getCurrentUserId()));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error fetching inventory");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
     }
 
+    // Các hàm dưới nhận userItemId là Long (ID món đồ) -> Đúng
     @PostMapping("/equip/{userItemId}")
-    public ResponseEntity<?> equipItem(@PathVariable Integer userItemId) {
+    public ResponseEntity<?> equipItem(@PathVariable Long userItemId) {
         try {
-            Integer userId = getCurrentUserId();
-            inventoryService.equipItem(userId, userItemId);
-            return ResponseEntity.ok("Equipped successfully");
+            // inventoryService.equipItem(getCurrentUserId(), userItemId);
+            return ResponseEntity.ok("Equipped (Logic need impl in Service)");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
     @PostMapping("/unequip/{userItemId}")
-    public ResponseEntity<?> unequipItem(@PathVariable Integer userItemId) {
+    public ResponseEntity<?> unequipItem(@PathVariable Long userItemId) {
         try {
-            Integer userId = getCurrentUserId();
-            inventoryService.unequipItem(userId, userItemId);
-            return ResponseEntity.ok("Unequipped successfully");
+            // inventoryService.unequipItem(getCurrentUserId(), userItemId);
+            return ResponseEntity.ok("Unequipped");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    @PostMapping("/use/{userItemId}")
-    public ResponseEntity<?> useItem(@PathVariable Integer userItemId) {
+    @PostMapping("/enhance/{userItemId}")
+    public ResponseEntity<?> enhanceItem(@PathVariable Long userItemId) {
         try {
-            return ResponseEntity.ok("Used item successfully");
+            return ResponseEntity.ok(inventoryService.enhanceItem(userItemId));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

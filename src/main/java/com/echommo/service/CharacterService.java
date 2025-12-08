@@ -5,7 +5,7 @@ import com.echommo.entity.Character;
 import com.echommo.entity.*;
 import com.echommo.repository.*;
 import com.echommo.enums.CharacterStatus;
-import com.echommo.enums.Role; // [ADD] Import Role
+import com.echommo.enums.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -61,36 +61,45 @@ public class CharacterService {
         Character c = new Character();
         c.setUser(u);
         c.setName(req.getName());
-        c.setLv(1);
+        c.setLevel(1); // [FIX] setLv -> setLevel
 
-        // --- [FIX] CHECK ROLE ĐỂ SET CHỈ SỐ GỐC ---
         if (u.getRole() == Role.ADMIN) {
-            // Admin: Full 999
-            c.setHp(9999); c.setMaxHp(9999); // Máu trâu hơn chút
-            c.setEnergy(999); c.setMaxEnergy(999);
+            // --- ADMIN SETUP ---
+            c.setCurrentHp(9999); c.setMaxHp(9999); // [FIX] setHp -> setCurrentHp
+            c.setCurrentEnergy(999); c.setMaxEnergy(999); // [FIX] setEnergy -> setCurrentEnergy
 
             c.setBaseAtk(999);
             c.setBaseDef(999);
             c.setBaseSpeed(999);
-            c.setBaseCritRate(100);  // Admin chắc 100% crit luôn cho oách? Hoặc để 999 tùy bạn
-            c.setBaseCritDmg(300);   // 300% crit dmg
-        } else {
-            // User thường: Gốc = 0
-            c.setHp(100); c.setMaxHp(100);
-            c.setEnergy(50); c.setMaxEnergy(50);
+            c.setBaseCritRate(100);
+            c.setBaseCritDmg(300);
 
-            c.setBaseAtk(0);
-            c.setBaseDef(0);
-            c.setBaseSpeed(0);
-            c.setBaseCritRate(1);
-            c.setBaseCritDmg(150);
+            // Set stats khủng cho admin
+            c.setStatPoints(9999);
+            c.setStr(999);
+            c.setVit(999);
+            c.setAgi(999);
+        } else {
+            // --- USER THƯỜNG SETUP ---
+            // 1. Khởi tạo chỉ số tiềm năng mặc định
+            c.setStatPoints(5);
+            c.setStr(5);
+            c.setVit(5);
+            c.setAgi(5);
+
+            // 2. Tính toán chỉ số chiến đấu từ tiềm năng
+            recalculateDerivedStats(c);
+
+            // 3. Set các chỉ số còn lại
+            c.setBaseCritRate(50); // 5%
+            c.setCurrentEnergy(50); c.setMaxEnergy(50); // [FIX] setEnergy -> setCurrentEnergy
         }
 
         c.setStatus(CharacterStatus.IDLE);
         c = charRepo.save(c);
 
-        // Tặng đồ tân thủ (Admin cũng tặng luôn cho vui)
-        for(String n : Arrays.asList("Kiếm Gỗ", "Áo Vải", "Bình Máu")) {
+        // Tặng đồ tân thủ
+        for(String n : Arrays.asList("Kiếm Gỗ", "Áo Vải", "Bình Máu Nhỏ")) {
             Optional<Item> i = itemRepo.findByName(n);
             if(i.isPresent()) {
                 UserItem ui = new UserItem();
@@ -109,5 +118,67 @@ public class CharacterService {
         c.setName(name);
         charRepo.save(c);
         return "Đổi tên thành công: "+name;
+    }
+
+    // =========================================================
+    // 👇 LOGIC CỘNG ĐIỂM TIỀM NĂNG & TÍNH STATS
+    // =========================================================
+
+    @Transactional
+    public Character addStats(int str, int vit, int agi) {
+        Character character = getMyCharacter();
+        if (character == null) {
+            throw new RuntimeException("Không tìm thấy nhân vật");
+        }
+
+        int totalPointsNeeded = str + vit + agi;
+        if (totalPointsNeeded <= 0) {
+            throw new RuntimeException("Số điểm cộng phải lớn hơn 0");
+        }
+
+        if (character.getStatPoints() < totalPointsNeeded) {
+            throw new RuntimeException("Không đủ điểm tiềm năng");
+        }
+
+        // 1. Trừ điểm tiềm năng
+        character.setStatPoints(character.getStatPoints() - totalPointsNeeded);
+
+        // 2. Cộng dồn vào chỉ số gốc (xử lý null safe)
+        character.setStr((character.getStr() == null ? 5 : character.getStr()) + str);
+        character.setVit((character.getVit() == null ? 5 : character.getVit()) + vit);
+        character.setAgi((character.getAgi() == null ? 5 : character.getAgi()) + agi);
+
+        // 3. Tính toán lại các chỉ số chiến đấu
+        recalculateDerivedStats(character);
+
+        return charRepo.save(character);
+    }
+
+    /**
+     * Hàm tính toán lại chỉ số cơ bản dựa trên điểm tiềm năng (STR, VIT, AGI)
+     */
+    private void recalculateDerivedStats(Character c) {
+        int baseHpConstant = 100;
+        int baseAtkConstant = 10;
+        int baseDefConstant = 5;
+        int baseSpeedConstant = 10;
+        int baseCritDmgConstant = 150;
+
+        // Tính HP
+        int newMaxHp = baseHpConstant + ((c.getVit() == null ? 0 : c.getVit()) * 10);
+        c.setMaxHp(newMaxHp);
+        c.setCurrentHp(newMaxHp); // [FIX] setHp -> setCurrentHp
+
+        // Tính ATK
+        c.setBaseAtk(baseAtkConstant + ((c.getStr() == null ? 0 : c.getStr()) * 2));
+
+        // Tính DEF
+        c.setBaseDef(baseDefConstant + ((c.getVit() == null ? 0 : c.getVit()) * 1));
+
+        // Tính Speed (2 AGI = 1 Speed)
+        c.setBaseSpeed(baseSpeedConstant + ((c.getAgi() == null ? 0 : c.getAgi()) / 2));
+
+        // Tính Crit Dmg (2 STR = 1% Crit Dmg)
+        c.setBaseCritDmg(baseCritDmgConstant + ((c.getStr() == null ? 0 : c.getStr()) / 2));
     }
 }
