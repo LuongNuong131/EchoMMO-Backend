@@ -1,6 +1,6 @@
 package com.echommo.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties; // [QUAN TRỌNG] Thêm dòng này
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -17,6 +17,9 @@ public class MarketListing {
 
     @ManyToOne
     @JoinColumn(name = "seller_id", nullable = false)
+    // [FIX QUAN TRỌNG] Ngăn lỗi vòng lặp & Lazy loading khi lấy thông tin người bán
+    // Chỉ cho phép lấy các trường đơn giản, chặn các trường quan hệ phức tạp
+    @JsonIgnoreProperties({"passwordHash", "wallet", "inventory", "userItems", "tokens", "role", "hibernateLazyInitializer", "handler"})
     private User seller;
 
     @ManyToOne

@@ -26,16 +26,14 @@ public class MarketplaceService {
     public List<Item> getShopItems() { return itemRepository.findAll(); }
 
     public List<MarketListing> getPlayerListings() {
-        // [FIX] Repository trả về Integer ID, logic này giữ nguyên
         return listingRepository.findByStatusOrderByCreatedAtDesc("ACTIVE");
     }
 
+    // [FIX] Cập nhật hàm này để dùng getCurrentUser() an toàn hơn
     public List<MarketListing> getMyListings() {
-        String u = SecurityContextHolder.getContext().getAuthentication().getName();
-        // [FIX] getUserId() trả về Integer, repository nhận Integer -> Khớp
-        return listingRepository.findBySeller_UserIdAndStatus(
-                userRepository.findByUsername(u).get().getUserId(), "ACTIVE"
-        );
+        User user = getCurrentUser();
+        // Lấy tất cả tin ACTIVE của chính mình
+        return listingRepository.findBySeller_UserIdAndStatus(user.getUserId(), "ACTIVE");
     }
 
     private User getCurrentUser() {
@@ -46,11 +44,10 @@ public class MarketplaceService {
 
     // --- MUA SHOP HỆ THỐNG ---
     @Transactional
-    public String buyItem(Integer itemId, Integer qty) { // [FIX] Đổi Long -> Integer
+    public String buyItem(Integer itemId, Integer qty) {
         if (qty <= 0) throw new RuntimeException("Số lượng phải > 0");
         User user = getCurrentUser();
 
-        // [FIX] itemRepository.findById nhận Integer
         Item item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Vật phẩm không tồn tại"));
 
@@ -67,11 +64,10 @@ public class MarketplaceService {
 
     // --- BÁN CHO NPC ---
     @Transactional
-    public String sellItem(Integer userItemId, Integer qty) { // [FIX] Đổi Long -> Integer
+    public String sellItem(Integer userItemId, Integer qty) {
         if (qty <= 0) throw new RuntimeException("Số lượng phải > 0");
         User user = getCurrentUser();
 
-        // [FIX] userItemRepository.findById nhận Integer
         UserItem ui = userItemRepository.findById(userItemId)
                 .orElseThrow(() -> new RuntimeException("Vật phẩm không tồn tại"));
 
@@ -100,7 +96,6 @@ public class MarketplaceService {
         if (req.getQuantity() <= 0) throw new RuntimeException("Số lượng phải > 0");
         User user = getCurrentUser();
 
-        // [FIX] req.getUserItemId() là Integer, biến uItemId cũng phải là Integer
         Integer uItemId = req.getUserItemId();
 
         UserItem ui = userItemRepository.findById(uItemId)
@@ -128,11 +123,10 @@ public class MarketplaceService {
 
     // --- MUA TỪ CHỢ ---
     @Transactional
-    public String buyPlayerListing(Integer listingId, Integer qtyToBuy) { // [FIX] Đổi Long -> Integer
+    public String buyPlayerListing(Integer listingId, Integer qtyToBuy) {
         if (qtyToBuy <= 0) throw new RuntimeException("SL > 0");
         User buyer = getCurrentUser();
 
-        // [FIX] listingRepository.findById nhận Integer
         MarketListing l = listingRepository.findById(listingId)
                 .orElseThrow(() -> new RuntimeException("Tin đăng không tồn tại"));
 
@@ -183,10 +177,9 @@ public class MarketplaceService {
 
     // --- HỦY BÁN / RÚT ĐỒ VỀ ---
     @Transactional
-    public String cancelListing(Integer id) { // [FIX] Đổi Long -> Integer
+    public String cancelListing(Integer id) {
         User user = getCurrentUser();
 
-        // [FIX] listingRepository.findById nhận Integer
         MarketListing l = listingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tin đăng không tồn tại"));
 
@@ -230,10 +223,8 @@ public class MarketplaceService {
     }
 
     private String addItem(User user, Item item, int qty, int enhance) {
-        // [FIX] findByUser_UserId nhận Integer, user.getUserId() trả về Integer -> Khớp
         List<UserItem> list = userItemRepository.findByUser_UserIdOrderByIsEquippedDesc(user.getUserId());
 
-        // [FIX] item.getItemId() trả về Integer -> Khớp
         Optional<UserItem> ex = list.stream()
                 .filter(i -> i.getItem().getItemId().equals(item.getItemId())
                         && i.getEnhanceLevel() == enhance
