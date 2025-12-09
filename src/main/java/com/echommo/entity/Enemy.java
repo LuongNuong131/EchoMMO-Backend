@@ -12,11 +12,15 @@ public class Enemy {
     private Integer enemyId;
 
     private String name;
+
+    // [FIX] Thêm trường Level vào đây để Repository không bị lỗi
+    @Column(columnDefinition = "int default 1")
+    private Integer level = 1;
+
     private Integer hp;
     private Integer atk;
     private Integer def;
 
-    // 👇 CÁC CỘT MỚI BẮT BUỘC PHẢI CÓ
     @Column(columnDefinition = "int default 10")
     private Integer speed = 10;
 
@@ -26,7 +30,6 @@ public class Enemy {
     @Column(name = "gold_reward", columnDefinition = "int default 10")
     private Integer goldReward = 10;
 
-    // Hình ảnh quái (để hiển thị frontend sau này)
     @Column(name = "image_url")
     private String imageUrl;
 

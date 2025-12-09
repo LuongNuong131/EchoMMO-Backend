@@ -14,7 +14,7 @@ public class AdminService {
     @Autowired private UserRepository userRepo;
     @Autowired private ItemRepository itemRepo;
     @Autowired private WalletRepository walletRepo;
-    @Autowired private UserItemRepository uiRepo;
+    @Autowired private UserItemRepository uiRepo; // Repo quản lý túi đồ
     @Autowired private MarketListingRepository listingRepo;
     @Autowired private NotificationService notiService;
 
@@ -22,7 +22,12 @@ public class AdminService {
         Map<String, Object> m = new HashMap<>();
         m.put("totalUsers", userRepo.count());
         m.put("totalItems", itemRepo.count());
-        m.put("totalGold", walletRepo.findAll().stream().map(Wallet::getGold).reduce(BigDecimal.ZERO, BigDecimal::add));
+        // Tính tổng vàng an toàn hơn, tránh NullPointerException
+        BigDecimal totalGold = walletRepo.findAll().stream()
+                .map(Wallet::getGold)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        m.put("totalGold", totalGold);
         return m;
     }
 
@@ -31,28 +36,31 @@ public class AdminService {
     public List<MarketListing> getAllListings() { return listingRepo.findAll(); }
 
     public Item createItem(Item i) {
-        if(i.getImageUrl()==null || i.getImageUrl().isEmpty()) i.setImageUrl("/assets/items/default.png");
+        if(i.getImageUrl()==null || i.getImageUrl().isEmpty()) i.setImageUrl("default_item");
         return itemRepo.save(i);
     }
 
     public void deleteItem(Integer id) { itemRepo.deleteById(id); }
 
-    // [FIX] Cập nhật hàm xóa User: Xóa Item con trước rồi mới xóa User cha
+    // [FIX] Cập nhật hàm xóa User chuẩn logic
     @Transactional
     public void deleteUser(Integer id) {
-        // 1. Tìm user trước, nếu không thấy thì báo lỗi luôn
+        // 1. Tìm user
         User u = userRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
 
-        // 2. Xóa các Item do user này tạo (Đây là nguyên nhân gây lỗi FK cứng đầu)
-        itemRepo.deleteByUser(u);
+        // 2. [FIX QUAN TRỌNG] Xóa túi đồ (UserItem) của user, KHÔNG PHẢI xóa Item gốc
+        // Nếu không xóa cái này, DB sẽ báo lỗi khóa ngoại (Foreign Key Constraint)
+        List<UserItem> userItems = uiRepo.findByUser_UserId(id);
+        if (userItems != null && !userItems.isEmpty()) {
+            uiRepo.deleteAll(userItems);
+        }
 
-        // 3. Cuối cùng mới xóa User (Lúc này các bảng khác có cascade chuẩn sẽ tự xóa theo)
+        // 3. Xóa User (Cascade sẽ tự xóa Wallet, Character...)
         userRepo.delete(u);
     }
 
     public void deleteListing(Integer id) { listingRepo.deleteById(id); }
 
-    // [FIX] Ban User
     public void banUser(Integer id, String reason) {
         User u = userRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
         u.setIsActive(false);
@@ -61,7 +69,6 @@ public class AdminService {
         userRepo.save(u);
     }
 
-    // [FIX] Unban User
     public void unbanUser(Integer id) {
         User u = userRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
         u.setIsActive(true);
@@ -70,7 +77,6 @@ public class AdminService {
         userRepo.save(u);
     }
 
-    // Giữ nguyên toggle cho tương thích cũ
     public void toggleUser(Integer id) {
         User u = userRepo.findById(id).orElseThrow();
         if(u.getIsActive()) banUser(id, "Khóa nhanh bởi Admin");
