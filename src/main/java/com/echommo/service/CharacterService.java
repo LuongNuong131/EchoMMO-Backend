@@ -193,7 +193,8 @@
 //        c.setBaseCritDmg(150 + (luck * 1)); // 1 Luck = +1% Crit Damage
 //    }
 //}
-
+//
+//
 
 
 package com.echommo.service;
@@ -229,6 +230,7 @@ public class CharacterService {
             return null;
         }
     }
+    
 
     @Transactional
     public Character createDefaultCharacter(User user) {
@@ -263,7 +265,7 @@ public class CharacterService {
         c.setStatus(CharacterStatus.IDLE);
 
         if (u.getRole() == Role.ADMIN) {
-            // --- ADMIN SETUP ---
+            // --- ADMIN SETUP (Full Chỉ số) ---
             c.setCurrentHp(9999); c.setMaxHp(9999);
             c.setCurrentEnergy(999); c.setMaxEnergy(999);
 
@@ -273,28 +275,28 @@ public class CharacterService {
             c.setBaseCritRate(100);
             c.setBaseCritDmg(300);
 
-            // Set stats khủng cho admin
+            // Set stats khủng
             c.setStatPoints(9999);
             c.setStr(999);
-            c.setVit(999);          // [FIX] Dùng Vit thay vì Intelligence ở đây nếu muốn HP
-            c.setAgi(999);          // [FIX] Dùng Agi
+            c.setVit(999);
+            c.setAgi(999);
             c.setDex(999);
             c.setIntelligence(999);
             c.setLuck(999);
         } else {
-            // --- USER THƯỜNG SETUP ---
+            // --- USER THƯỜNG SETUP (Mặc định 5 điểm) ---
             c.setStatPoints(5);
             c.setStr(5);
-            c.setVit(5);            // [FIX]
-            c.setAgi(5);            // [FIX]
+            c.setVit(5);
+            c.setAgi(5);
             c.setDex(5);
             c.setIntelligence(5);
             c.setLuck(5);
 
-            // Tính toán chỉ số
+            // Tính toán chỉ số chiến đấu từ stats
             recalculateDerivedStats(c);
 
-            // Set các chỉ số còn lại
+            // Set năng lượng khởi đầu
             c.setCurrentEnergy(50);
             c.setMaxEnergy(50);
         }
@@ -360,7 +362,7 @@ public class CharacterService {
         return charRepo.save(character);
     }
 
-    // Helper xử lý null
+    // Helper xử lý null để tránh lỗi NullPointerException
     private int getSafeVal(Integer val) {
         return val == null ? 0 : val;
     }
@@ -374,7 +376,7 @@ public class CharacterService {
         int baseDefConstant = 5;
         int baseSpeedConstant = 10;
 
-        // Lấy giá trị an toàn
+        // Lấy giá trị an toàn từ Entity
         int str = getSafeVal(c.getStr());
         int vit = getSafeVal(c.getVit());
         int agi = getSafeVal(c.getAgi());
@@ -399,7 +401,7 @@ public class CharacterService {
         c.setBaseSpeed(baseSpeedConstant + agi);
 
         // 5. CRIT RATE (Tỷ lệ bạo kích) = 50 (5%) + (DEX * 2)
-        // Ví dụ: 10 DEX -> 5% + 2% = 7%
+        // Ví dụ: 10 DEX -> 50 + 20 = 70 (tức 7%)
         c.setBaseCritRate(50 + (dex * 2));
 
         // 6. CRIT DMG (Sát thương bạo kích) = 150% + (LUCK * 1%)
