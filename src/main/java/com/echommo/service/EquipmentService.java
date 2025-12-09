@@ -34,9 +34,10 @@ public class EquipmentService {
     // ==========================================================
 
     private String getRequiredMaterial(int currentEnhanceLevel) {
-        if (currentEnhanceLevel < 10) return "Gỗ";
-        if (currentEnhanceLevel < 20) return "Sắt";
-        return "Bạch Kim";
+        if (currentEnhanceLevel < 5) return "Gỗ"; // Level 0-4
+        if (currentEnhanceLevel < 10) return "Đá"; // Level 5-9
+        if (currentEnhanceLevel < 20) return "Sắt"; // Level 10-19
+        return "Bạch Kim"; // Level 20-29
     }
 
     private int getRequiredQuantity(int currentEnhanceLevel) {
@@ -81,35 +82,70 @@ public class EquipmentService {
         }
 
         wallet.setGold(wallet.getGold().subtract(GOLD_COST));
-        walletRepo.save(wallet);
 
 
         // 2. Kiểm tra và Trừ nguyên liệu
         String matName = getRequiredMaterial(item.getEnhanceLevel());
         int qtyRequired = getRequiredQuantity(item.getEnhanceLevel());
 
-        UserItem materialInBag = userItemRepo.findByUser_UserIdAndItem_Name(userId, matName)
-                .orElseThrow(() -> new RuntimeException("Thiếu nguyên liệu! Cần " + qtyRequired + " " + matName));
+        // --- CHECK FOR BASIC RESOURCES IN WALLET (Gỗ / Đá) ---
+        int currentQty = 0;
 
-        if (materialInBag.getQuantity() < qtyRequired) {
-            throw new RuntimeException("Không đủ " + matName + "! (Cần: " + qtyRequired + ")");
+        if (matName.equals("Gỗ")) {
+            currentQty = (wallet.getWood() != null ? wallet.getWood() : 0);
+
+            if (currentQty < qtyRequired) {
+                throw new RuntimeException("Không đủ Gỗ! (Cần: " + qtyRequired + ")");
+            }
+
+            wallet.setWood(currentQty - qtyRequired);
+
+        } else if (matName.equals("Đá")) {
+            currentQty = (wallet.getStone() != null ? wallet.getStone() : 0);
+
+            if (currentQty < qtyRequired) {
+                throw new RuntimeException("Không đủ Đá! (Cần: " + qtyRequired + ")");
+            }
+
+            wallet.setStone(currentQty - qtyRequired);
+
+        }
+        // --- CHECK FOR OTHER MATERIALS AS USERITEM (Sắt, Bạch Kim) ---
+        else {
+            UserItem materialInBag = userItemRepo.findByUser_UserIdAndItem_Name(userId, matName)
+                    .orElseThrow(() -> new RuntimeException("Thiếu nguyên liệu! Cần " + qtyRequired + " " + matName));
+
+            if (materialInBag.getQuantity() < qtyRequired) {
+                throw new RuntimeException("Không đủ " + matName + "! (Cần: " + qtyRequired + ")");
+            }
+
+            // Trừ vật liệu và xóa nếu hết
+            materialInBag.setQuantity(materialInBag.getQuantity() - qtyRequired);
+            if (materialInBag.getQuantity() <= 0) {
+                userItemRepo.delete(materialInBag);
+            } else {
+                userItemRepo.save(materialInBag);
+            }
         }
 
-        // Trừ vật liệu và xóa nếu hết
-        materialInBag.setQuantity(materialInBag.getQuantity() - qtyRequired);
-        if (materialInBag.getQuantity() <= 0) {
-            userItemRepo.delete(materialInBag);
-        } else {
-            userItemRepo.save(materialInBag);
-        }
+        // --- Save Wallet (Lưu lại việc trừ Vàng và Gỗ/Đá) ---
+        walletRepo.save(wallet);
+
 
         // 3. Tăng cấp (+1)
         int newLevel = item.getEnhanceLevel() + 1;
         item.setEnhanceLevel(newLevel);
 
-        // 4. Tăng Main Stat
+        // 4. Tăng Main Stat (Xử lý Null Main Stat Value)
+        BigDecimal mainStat = item.getMainStatValue();
+        if (mainStat == null) {
+            // Gán giá trị 1.00 làm nền để tránh crash
+            mainStat = BigDecimal.valueOf(1.00).setScale(2, RoundingMode.HALF_UP);
+            item.setMainStatValue(mainStat);
+        }
+
         BigDecimal oldDenominator = BigDecimal.valueOf(getBaseBoostFactor(newLevel - 1));
-        BigDecimal base = item.getMainStatValue().divide(oldDenominator, 2, RoundingMode.HALF_UP);
+        BigDecimal base = mainStat.divide(oldDenominator, 2, RoundingMode.HALF_UP);
         BigDecimal newNumerator = BigDecimal.valueOf(getBaseBoostFactor(newLevel));
         item.setMainStatValue(base.multiply(newNumerator).setScale(2, RoundingMode.HALF_UP));
 
@@ -122,8 +158,17 @@ public class EquipmentService {
     }
 
     private void handleSubStatRoll(UserItem item) throws Exception {
+        // [CRITICAL FIX: Xử lý Null Rarity]
+        Rarity rarity = item.getRarity();
+        if (rarity == null) {
+            rarity = Rarity.COMMON; // Gán mặc định COMMON để tránh crash
+            item.setRarity(rarity);
+            // KHÔNG CẦN userItemRepo.save(item) ở đây, vì nó sẽ được lưu cuối hàm upgradeItem
+        }
+
         List<SubStatDTO> stats = parseSubStats(item.getSubStats());
-        int maxSlots = item.getRarity().maxSubStats;
+        // Sử dụng biến rarity đã được kiểm tra
+        int maxSlots = rarity.maxSubStats;
 
         if (stats.size() < maxSlots) {
             // A. Mở dòng mới (Nếu chưa full dòng)
@@ -172,8 +217,9 @@ public class EquipmentService {
         // B. Snapshot Sub Stats & Tăng 1%
         List<SubStatDTO> stats = parseSubStats(item.getSubStats());
         for (SubStatDTO s : stats) {
-            s.setOriginalValue(s.getValue());
-            s.setValue(round(s.getOriginalValue() * 1.01));
+            if (s.getOriginalValue() != null) {
+                s.setValue(round(s.getOriginalValue() * 1.01));
+            }
         }
 
         item.setSubStats(objectMapper.writeValueAsString(stats));
