@@ -38,6 +38,7 @@ public class MarketplaceController {
         }
     }
 
+    // [UserItem ID là Long]
     @PostMapping("/sell")
     public ResponseEntity<?> sellToShop(@RequestBody Map<String, Object> body) {
         try {
@@ -49,6 +50,7 @@ public class MarketplaceController {
         }
     }
 
+    // [UserItem ID là Long]
     @PostMapping("/create")
     public ResponseEntity<?> createListing(@RequestBody CreateListingRequest req) {
         try {
@@ -58,11 +60,10 @@ public class MarketplaceController {
         }
     }
 
-    // [FIX START] Sửa lỗi 403 gây Logout: Thêm endpoint hỗ trợ gọi ID trên URL
+    // [FIX] Listing ID đổi về Integer
     @PostMapping("/buy/{id}")
     public ResponseEntity<?> buyListingByPath(@PathVariable Integer id, @RequestBody(required = false) Map<String, Integer> body) {
         try {
-            // Mặc định mua 1 nếu không gửi quantity
             int quantity = (body != null && body.containsKey("quantity")) ? body.get("quantity") : 1;
             return ResponseEntity.ok(service.buyPlayerListing(id, quantity));
         } catch (Exception e) {
@@ -70,17 +71,19 @@ public class MarketplaceController {
         }
     }
 
-    // Giữ lại endpoint cũ (nhận body) để tương thích nếu chỗ khác dùng
+    // [FIX] Listing ID đổi về Integer (Cast từ Object an toàn)
     @PostMapping("/buy")
-    public ResponseEntity<?> buyListing(@RequestBody Map<String, Integer> body) {
+    public ResponseEntity<?> buyListing(@RequestBody Map<String, Object> body) {
         try {
-            return ResponseEntity.ok(service.buyPlayerListing(body.get("listingId"), body.get("quantity")));
+            Integer listingId = ((Number) body.get("listingId")).intValue(); // Cast về int
+            Integer quantity = ((Number) body.get("quantity")).intValue();
+            return ResponseEntity.ok(service.buyPlayerListing(listingId, quantity));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    // [FIX END]
 
+    // [FIX] Listing ID đổi về Integer
     @PostMapping("/cancel/{id}")
     public ResponseEntity<?> cancelListing(@PathVariable Integer id) {
         try {

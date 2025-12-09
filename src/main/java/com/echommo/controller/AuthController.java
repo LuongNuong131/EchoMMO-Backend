@@ -35,19 +35,19 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@RequestBody AuthRequest loginRequest) {
-        // 1. Check User tồn tại và trạng thái Ban an toàn
+        // 1. Kiểm tra User tồn tại
         User user = userRepository.findByUsername(loginRequest.getUsername()).orElse(null);
 
-        // Chỉ chặn nếu isActive là FALSE
+        // 2. Kiểm tra trạng thái Ban
         if (user != null && Boolean.FALSE.equals(user.getIsActive())) {
             Map<String, String> response = new HashMap<>();
             response.put("error", "BANNED");
             response.put("message", "Tài khoản đã bị khóa!");
             response.put("reason", user.getBanReason() != null ? user.getBanReason() : "Vi phạm quy định");
-            response.put("date", user.getBannedAt() != null ? user.getBannedAt().toString() : "N/A");
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
         }
 
+        // 3. Xác thực
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
@@ -55,7 +55,6 @@ public class AuthController {
         String jwt = jwtUtils.generateToken((UserDetails) authentication.getPrincipal());
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        // Trả về Role dạng String cho Frontend
         String roleStr = user != null ? user.getRole().name() : "USER";
         return ResponseEntity.ok(new AuthResponse(jwt, userDetails.getUsername(), roleStr));
     }
@@ -69,23 +68,18 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Lỗi: Email đã được sử dụng!");
         }
 
-        // 1. Tạo User
+        // 1. Tạo User mới
         User user = new User();
         user.setUsername(signUpRequest.getUsername());
         user.setEmail(signUpRequest.getEmail());
-
-        // [FIX QUAN TRỌNG] Set cả hash và password thường để khớp với DB (cột password NOT NULL)
-        user.setPasswordHash(encoder.encode(signUpRequest.getPassword()));
-        user.setPassword(signUpRequest.getPassword());
-
+        user.setPasswordHash(encoder.encode(signUpRequest.getPassword())); // Mã hóa mật khẩu
+        user.setPassword(signUpRequest.getPassword()); // (Tùy chọn) Lưu password thường nếu hệ thống cũ yêu cầu
         user.setFullName(signUpRequest.getFullName());
         user.setAvatarUrl("🐲");
-
-        // Kích hoạt user và set Role
         user.setIsActive(true);
         user.setRole(Role.USER);
 
-        // 2. Tạo Ví
+        // 2. Tạo Ví khởi đầu
         Wallet wallet = new Wallet();
         wallet.setUser(user);
         wallet.setGold(new BigDecimal("100.00"));
@@ -93,9 +87,9 @@ public class AuthController {
 
         userRepository.save(user);
 
-        // 3. AUTO-CREATE CHARACTER
+        // 3. Tự động tạo Nhân vật (Character)
         try {
-            // Tự động đăng nhập để lấy Context cho CharacterService
+            // Fake login để lấy context cho CharacterService
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(signUpRequest.getUsername(), signUpRequest.getPassword()));
             SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -104,8 +98,7 @@ public class AuthController {
             charReq.setName(signUpRequest.getUsername());
             characterService.createCharacter(charReq);
         } catch (Exception e) {
-            // Nếu tạo nhân vật lỗi thì vẫn báo đăng ký thành công (tránh rollback user đã tạo)
-            return ResponseEntity.ok("Đăng ký thành công (Lưu ý: Không thể tự tạo nhân vật - " + e.getMessage() + ")");
+            return ResponseEntity.ok("Đăng ký thành công tài khoản, nhưng lỗi tạo nhân vật: " + e.getMessage());
         }
 
         return ResponseEntity.ok("Đăng ký thành công! Đã tạo nhân vật và tặng quà tân thủ.");

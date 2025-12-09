@@ -1,6 +1,7 @@
 package com.echommo.entity;
 
 import com.echommo.enums.Rarity;
+import com.fasterxml.jackson.annotation.JsonIgnore; // Import quan trọng
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,7 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime; // Import mới cho lỗi setAcquiredAt
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "user_items")
@@ -24,9 +25,10 @@ public class UserItem {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore // [FIX QUAN TRỌNG] Ngăn lỗi "Could not write JSON" và lặp vô tận
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER) // Nên để Eager để lấy luôn thông tin item (tên, ảnh) hiển thị
     @JoinColumn(name = "item_id", nullable = false)
     private Item item;
 
@@ -34,13 +36,10 @@ public class UserItem {
     private Boolean isEquipped = false;
 
     // --- XỬ LÝ XUNG ĐỘT TÊN GỌI (Enhance vs Enhancement) ---
-
-    // Chúng ta chọn 'enhancementLevel' làm tên chính trong Database
     @Column(name = "enhancement_level")
     private Integer enhancementLevel = 0;
-    // Lombok sẽ tự sinh: getEnhancementLevel(), setEnhancementLevel() -> Fix InventoryServiceImpl
 
-    // Thêm thủ công 2 hàm này để chiều lòng MarketplaceService (fix lỗi cũ)
+    // Helper cho các Service cũ gọi getEnhanceLevel
     public Integer getEnhanceLevel() {
         return this.enhancementLevel;
     }
@@ -49,13 +48,8 @@ public class UserItem {
         this.enhancementLevel = level;
     }
 
-    // --- CÁC FIELD MỚI THÊM ---
-
-    // Fix lỗi: setAcquiredAt(LocalDateTime)
     @Column(name = "acquired_at")
     private LocalDateTime acquiredAt;
-
-    // --- CÁC FIELD CŨ ---
 
     private Integer quantity;
 
@@ -69,7 +63,6 @@ public class UserItem {
     @Column(columnDefinition = "TEXT")
     private String subStats;
 
-    // Hàm tiện ích: Tự động set thời gian khi tạo mới (Optional)
     @PrePersist
     protected void onCreate() {
         if (acquiredAt == null) {

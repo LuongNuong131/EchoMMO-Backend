@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,7 +50,6 @@ public class MarketplaceService {
         Item item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Vật phẩm không tồn tại"));
 
-        // [FIX] Chuyển đổi Integer sang BigDecimal trước khi nhân
         BigDecimal price = BigDecimal.valueOf(item.getBasePrice());
         BigDecimal cost = price.multiply(BigDecimal.valueOf(qty));
 
@@ -63,9 +63,9 @@ public class MarketplaceService {
         return "Mua thành công!";
     }
 
-    // --- BÁN CHO NPC ---
+    // --- BÁN CHO NPC (UserItem ID là Long) ---
     @Transactional
-    public String sellItem(Long userItemId, Integer qty) { // [FIX] ID là Long
+    public String sellItem(Long userItemId, Integer qty) {
         if (qty <= 0) throw new RuntimeException("Số lượng phải > 0");
         User user = getCurrentUser();
 
@@ -74,12 +74,11 @@ public class MarketplaceService {
 
         if (!ui.getUser().getUserId().equals(user.getUserId()))
             throw new RuntimeException("Vật phẩm không phải của bạn");
-        if (ui.getIsEquipped())
+        if (Boolean.TRUE.equals(ui.getIsEquipped()))
             throw new RuntimeException("Không thể bán vật phẩm đang mặc");
         if (ui.getQuantity() < qty)
             throw new RuntimeException("Không đủ số lượng để bán");
 
-        // [FIX] Chuyển đổi Integer sang BigDecimal và tính giá bán (50%)
         BigDecimal basePrice = BigDecimal.valueOf(ui.getItem().getBasePrice());
         BigDecimal earn = basePrice
                 .multiply(new BigDecimal("0.5"))
@@ -92,21 +91,19 @@ public class MarketplaceService {
         return "Bán thành công! Nhận được " + earn + " Vàng.";
     }
 
-    // --- ĐĂNG BÁN CHỢ (P2P) ---
+    // --- ĐĂNG BÁN CHỢ (UserItem ID là Long) ---
     @Transactional
     public String createListing(CreateListingRequest req) {
         if (req.getQuantity() <= 0) throw new RuntimeException("Số lượng phải > 0");
         User user = getCurrentUser();
 
-        // [FIX] Lấy ID dạng Long
         Long uItemId = req.getUserItemId();
-
         UserItem ui = userItemRepository.findById(uItemId)
                 .orElseThrow(() -> new RuntimeException("Vật phẩm không tồn tại"));
 
         if (!ui.getUser().getUserId().equals(user.getUserId()))
             throw new RuntimeException("Lỗi quyền sở hữu");
-        if (ui.getIsEquipped())
+        if (Boolean.TRUE.equals(ui.getIsEquipped()))
             throw new RuntimeException("Đang trang bị, vui lòng tháo ra trước khi bán");
         if (ui.getQuantity() < req.getQuantity())
             throw new RuntimeException("Không đủ số lượng");
@@ -116,7 +113,8 @@ public class MarketplaceService {
         ml.setItem(ui.getItem());
         ml.setQuantity(req.getQuantity());
         ml.setPrice(req.getPrice());
-        ml.setEnhanceLevel(ui.getEnhanceLevel());
+        // [FIX] Phòng hờ null ngay lúc tạo
+        ml.setEnhanceLevel(ui.getEnhanceLevel() != null ? ui.getEnhanceLevel() : 0);
         ml.setStatus("ACTIVE");
         listingRepository.save(ml);
 
@@ -124,7 +122,7 @@ public class MarketplaceService {
         return "Đã đăng bán lên chợ thành công!";
     }
 
-    // --- MUA TỪ CHỢ ---
+    // --- MUA TỪ CHỢ (Listing ID là Integer) ---
     @Transactional
     public String buyPlayerListing(Integer listingId, Integer qtyToBuy) {
         if (qtyToBuy <= 0) throw new RuntimeException("SL > 0");
@@ -148,16 +146,17 @@ public class MarketplaceService {
         buyer.getWallet().setGold(buyer.getWallet().getGold().subtract(total));
         walletRepository.save(buyer.getWallet());
 
-        // 2. Cộng tiền người bán (Trừ phí 5%)
+        // 2. Cộng tiền người bán (Trừ phí 5% - Có làm tròn)
         BigDecimal fee = total.multiply(new BigDecimal("0.05"));
-        BigDecimal sellerReceive = total.subtract(fee);
+        BigDecimal sellerReceive = total.subtract(fee).setScale(2, RoundingMode.HALF_UP);
 
         User seller = l.getSeller();
         seller.getWallet().setGold(seller.getWallet().getGold().add(sellerReceive));
         walletRepository.save(seller.getWallet());
 
-        // 3. Giao hàng
-        deliverItem(buyer, l.getItem(), qtyToBuy, l.getEnhanceLevel());
+        // 3. Giao hàng - [FIX QUAN TRỌNG] Handle null enhance level
+        int enhanceLvl = l.getEnhanceLevel() != null ? l.getEnhanceLevel() : 0;
+        deliverItem(buyer, l.getItem(), qtyToBuy, enhanceLvl);
 
         // 4. Cập nhật tin đăng
         int left = l.getQuantity() - qtyToBuy;
@@ -169,7 +168,6 @@ public class MarketplaceService {
         }
         listingRepository.save(l);
 
-        // 5. Thông báo
         notificationService.sendNotification(seller,
                 "💰 Hàng đã bán",
                 "Bạn đã bán " + qtyToBuy + " x " + l.getItem().getName() + ". Nhận được: " + sellerReceive + " vàng",
@@ -178,7 +176,7 @@ public class MarketplaceService {
         return "Mua thành công!";
     }
 
-    // --- HỦY BÁN / RÚT ĐỒ VỀ ---
+    // --- HỦY BÁN (Listing ID là Integer) ---
     @Transactional
     public String cancelListing(Integer id) {
         User user = getCurrentUser();
@@ -193,7 +191,9 @@ public class MarketplaceService {
         l.setStatus("CANCELLED");
         listingRepository.save(l);
 
-        deliverItem(user, l.getItem(), l.getQuantity(), l.getEnhanceLevel());
+        // [FIX QUAN TRỌNG] Handle null enhance level
+        int enhanceLvl = l.getEnhanceLevel() != null ? l.getEnhanceLevel() : 0;
+        deliverItem(user, l.getItem(), l.getQuantity(), enhanceLvl);
         return "Đã hủy bán, vật phẩm đã trở về kho.";
     }
 
@@ -207,8 +207,6 @@ public class MarketplaceService {
         }
     }
 
-    // [FIX] Đưa tất cả vật phẩm (kể cả Gỗ/Đá) vào kho đồ (UserItem) để đồng bộ với GameService
-    // Tránh lỗi tìm không thấy hàm setWood/setStone trong Wallet
     private String deliverItem(User user, Item item, int qty, int enhance) {
         return addItem(user, item, qty, enhance);
     }
@@ -218,8 +216,8 @@ public class MarketplaceService {
 
         Optional<UserItem> ex = list.stream()
                 .filter(i -> i.getItem().getItemId().equals(item.getItemId())
-                        && i.getEnhanceLevel() == enhance
-                        && !i.getIsEquipped())
+                        && i.getEnhanceLevel().equals(enhance) // Dùng equals cho Integer
+                        && !Boolean.TRUE.equals(i.getIsEquipped()))
                 .findFirst();
 
         if (ex.isPresent()) {

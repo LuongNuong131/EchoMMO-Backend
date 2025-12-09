@@ -1,4 +1,4 @@
-package com.echommo.config;
+package com.echommo.security; // Lưu ý: Package thường là .security hoặc .config tùy cấu trúc của bạn
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -19,9 +19,10 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
-public class SecurityConfiguration {
+public class SecurityConfig { // Đã sửa tên class trùng với tên file
 
-    private final JwtAuthenticationFilter jwtAuthFilter;
+    // Sửa tên Filter cho đúng với file metadata bạn có (AuthTokenFilter)
+    private final AuthTokenFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
 
     @Bean
@@ -30,10 +31,9 @@ public class SecurityConfiguration {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Kích hoạt CORS
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll() // Cho phép đăng nhập/đăng ký
-                        .requestMatchers("/api/inventory/**").authenticated() // <--- QUAN TRỌNG: Phải có dòng này
-                        .requestMatchers("/api/marketplace/**").authenticated()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/auth/**", "/api/public/**").permitAll() // Cho phép Auth và Public
+                        .requestMatchers("/api/admin/**").hasAnyAuthority("ADMIN") // Bảo vệ trang Admin
+                        .anyRequest().authenticated() // Còn lại phải đăng nhập
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
@@ -45,9 +45,14 @@ public class SecurityConfiguration {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:3000")); // Cho phép Frontend
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        // Cho phép Frontend chạy ở Localhost VÀ IP Radmin
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://26.48.225.101:5173"
+        ));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "x-auth-token"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
