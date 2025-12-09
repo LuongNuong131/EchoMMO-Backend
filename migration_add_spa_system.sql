@@ -1,6 +1,8 @@
 -- =========================================================
 -- ECHOMMO: THÊM HỆ THỐNG SPA NGHỈ NGƠI (RESTING SYSTEM)
--- Công thức: Thời gian nghỉ = % máu thiếu × 300 giây (tối đa 5 phút)
+-- Công thức:
+--   STANDARD/VIP: Thời gian = % máu thiếu × 300 giây (tối đa 5 phút)
+--   ROYAL (10 KC): Chỉ 10 giây! (VIP quá trời!)
 -- =========================================================
 
 USE echommo_db;

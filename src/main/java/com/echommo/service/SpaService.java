@@ -177,15 +177,21 @@ public class SpaService {
         int currentHp = character.getCurrentHp();
         int currentEnergy = character.getCurrentEnergy();
 
-        int hpToRecover = maxHp - currentHp;
-        int energyToRecover = maxEnergy - currentEnergy;
+        int durationSeconds;
 
-        double hpPercent = maxHp > 0 ? (double) hpToRecover / maxHp : 0;
-        double energyPercent = maxEnergy > 0 ? (double) energyToRecover / maxEnergy : 0;
-        double avgPercent = (hpPercent + energyPercent) / 2.0;
+        if ("ROYAL".equalsIgnoreCase(packageType)) {
+            durationSeconds = 10;
+        } else {
+            int hpToRecover = maxHp - currentHp;
+            int energyToRecover = maxEnergy - currentEnergy;
 
-        int durationSeconds = (int) Math.min(Math.ceil(avgPercent * 300), 300);
-        durationSeconds = Math.max(durationSeconds, 10);
+            double hpPercent = maxHp > 0 ? (double) hpToRecover / maxHp : 0;
+            double energyPercent = maxEnergy > 0 ? (double) energyToRecover / maxEnergy : 0;
+            double avgPercent = (hpPercent + energyPercent) / 2.0;
+
+            durationSeconds = (int) Math.min(Math.ceil(avgPercent * 300), 300);
+            durationSeconds = Math.max(durationSeconds, 10);
+        }
 
         LocalDateTime startTime = LocalDateTime.now();
         LocalDateTime endTime = startTime.plusSeconds(durationSeconds);
