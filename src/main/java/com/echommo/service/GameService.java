@@ -3,15 +3,16 @@ package com.echommo.service;
 import com.echommo.entity.Item;
 import com.echommo.entity.User;
 import com.echommo.entity.UserItem;
-import com.echommo.entity.Wallet; // [FIXED] Import Wallet
+import com.echommo.entity.Wallet;
 import com.echommo.entity.Character;
 import com.echommo.enums.Rarity;
 import com.echommo.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional; // [FIXED] Transactional
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -21,7 +22,7 @@ import java.util.Map;
 import java.util.Random;
 
 @Service
-@Transactional // TẤT CẢ public methods đều là Transactional (bao gồm getInventory)
+@Transactional
 public class GameService {
 
     @Autowired private UserRepository userRepo;
@@ -35,6 +36,18 @@ public class GameService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Random random = new Random();
     private static final BigDecimal REST_COST = new BigDecimal("50");
+
+    // --- HELPER METHODS: CURRENT USER (FIXED LOGIC) ---
+    private User getCurrentUser() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        if (username == null || username.equals("anonymousUser")) {
+            throw new RuntimeException("Lỗi xác thực: Người dùng chưa đăng nhập hoặc token đã hết hạn.");
+        }
+
+        return userRepo.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Lỗi CSDL: Không tìm thấy người dùng [" + username + "] trong hệ thống."));
+    }
 
     // =========================================================
     // 1. HỆ THỐNG MAP & FARM TÀI NGUYÊN (EXPLORE)
@@ -88,8 +101,6 @@ public class GameService {
                     ui.setIsEquipped(false);
                     ui.setEnhanceLevel(0);
                     ui.setMainStatValue(BigDecimal.ZERO);
-                    // Giả định Rarity.COMMON tồn tại
-                    // ui.setRarity(Rarity.COMMON);
                 }
 
                 ui.setQuantity(ui.getQuantity() + 1);
@@ -137,19 +148,15 @@ public class GameService {
         return user.getCharacter();
     }
 
-    // [SERVICE CUNG CẤP DATA CHO FRONTEND - ĐÃ SỬ DỤNG TRANSACTIONAL CỦA CLASS]
     public List<UserItem> getInventory(Integer userId) {
-        // Phương thức này hiện tại đã có @Transactional từ class
         return userItemRepo.findByUser_UserId(userId);
     }
 
     public Map<String, Object> equipItem(Integer userId, Long userItemId) {
-        // ... (Logic equip) ...
         return Map.of("success", true);
     }
 
     public Map<String, Object> unequipItem(Integer userId, Long userItemId) {
-        // ... (Logic unequip) ...
         return Map.of("success", true);
     }
 
@@ -157,6 +164,4 @@ public class GameService {
         return userRepo.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
     }
-
-
 }

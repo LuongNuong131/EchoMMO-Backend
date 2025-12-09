@@ -33,10 +33,22 @@ public class BattleService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Random random = new Random();
-    private static final double DROP_RATE = 0.5; // 50% rớt đồ
+    private static final double DROP_RATE = 0.5;
 
     public List<Skill> getAllSkills() {
         return skillRepo.findAll();
+    }
+
+    // --- HELPER METHODS: CURRENT USER (FIXED LOGIC) ---
+    private User getCurrentUser() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        if (username == null || username.equals("anonymousUser")) {
+            throw new RuntimeException("Lỗi xác thực: Người dùng chưa đăng nhập hoặc token đã hết hạn.");
+        }
+
+        return userRepo.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Lỗi CSDL: Không tìm thấy người dùng [" + username + "] trong hệ thống."));
     }
 
     // --- 1. START BATTLE ---
@@ -49,14 +61,12 @@ public class BattleService {
         BattleSession session = sessionRepo.findByUser_UserId(user.getUserId())
                 .orElse(new BattleSession());
 
-        // Reset hoặc tạo mới session
         session.setUser(user);
 
         // Random Enemy
         List<Enemy> enemies = enemyRepo.findAll();
         Enemy enemy;
         if (enemies.isEmpty()) {
-            // Dummy enemy nếu DB rỗng
             enemy = new Enemy(); enemy.setEnemyId(0); enemy.setName("Bù Nhìn");
             enemy.setHp(100); enemy.setAtk(5); enemy.setDef(0); enemy.setSpeed(10);
         } else {
@@ -74,7 +84,6 @@ public class BattleService {
 
         // Setup Player Stats
         int[] bonusStats = calculatePlayerStats(character);
-        // bonusStats: [0]=ATK, [1]=DEF, [2]=CRIT, [3]=HP, [4]=SPEED, [5]=CRIT_DMG
 
         session.setPlayerMaxHp(character.getMaxHp() + bonusStats[3]);
         session.setPlayerCurrentHp(session.getPlayerMaxHp());
@@ -102,25 +111,22 @@ public class BattleService {
 
         // A. Xử lý QTE (Quick Time Event)
         if (session.isQteActive()) {
-            // Check hết hạn QTE
             if (session.getQteExpiryTime() != null && LocalDateTime.now().isAfter(session.getQteExpiryTime())) {
                 logs.add("⏳ Quá trễ! Bạn không kịp đỡ đòn.");
-                actionType = "MISS"; // Ép buộc nhận dam
+                actionType = "MISS";
             }
 
             int[] stats = calculatePlayerStats(character);
             if ("BLOCK".equals(actionType)) {
                 logs.add("🛡️ ĐỠ ĐÒN THÀNH CÔNG! (0 sát thương)");
             } else {
-                // Đỡ trượt hoặc hết giờ
                 int def = character.getBaseDef() + stats[1];
-                int dmg = Math.max(1, session.getEnemyAtk() - def); // Ít nhất 1 damage
+                int dmg = Math.max(1, session.getEnemyAtk() - def);
                 session.setPlayerCurrentHp(session.getPlayerCurrentHp() - dmg);
                 logs.add("❌ Bị đánh trúng! Mất " + dmg + " máu.");
 
                 if (session.getPlayerCurrentHp() <= 0) return handleLoss(session);
             }
-            // Reset QTE
             session.setQteActive(false);
             session.setQteExpiryTime(null);
             sessionRepo.save(session);
@@ -133,11 +139,10 @@ public class BattleService {
 
         // --- 1. Player Attack ---
         int pAtk = character.getBaseAtk() + stats[0];
-        int pCritRate = character.getBaseCritRate() + stats[2]; // Flat point
+        int pCritRate = character.getBaseCritRate() + stats[2];
+        int pCritDmgPercent = character.getBaseCritDmg() + stats[5];
 
-        int pCritDmgPercent = character.getBaseCritDmg() + stats[5]; // VD: 150 + 50 = 200%
-
-        boolean isCrit = random.nextInt(1000) < pCritRate; // Rate tính theo scale 1000
+        boolean isCrit = random.nextInt(1000) < pCritRate;
 
         int rawDmg = Math.max(1, pAtk - session.getEnemyDef());
         int finalDmg = rawDmg;
@@ -157,10 +162,9 @@ public class BattleService {
         }
 
         // --- 2. Enemy Attack ---
-        // 30% tỉ lệ kích hoạt QTE
         if (random.nextInt(100) < 30) {
             session.setQteActive(true);
-            session.setQteExpiryTime(LocalDateTime.now().plusSeconds(3)); // 3 giây để bấm
+            session.setQteExpiryTime(LocalDateTime.now().plusSeconds(3));
             logs.add("⚠️ " + session.getEnemyName() + " chuẩn bị tung chiêu mạnh! ĐỠ NGAY (3s)!");
             sessionRepo.save(session);
 
@@ -169,7 +173,6 @@ public class BattleService {
             return res;
         }
 
-        // Đánh thường trả đòn
         int pDef = character.getBaseDef() + stats[1];
         int dmgToPlayer = Math.max(1, session.getEnemyAtk() - pDef);
         session.setPlayerCurrentHp(session.getPlayerCurrentHp() - dmgToPlayer);
@@ -182,7 +185,6 @@ public class BattleService {
     }
 
     // --- 3. TÍNH CHỈ SỐ (FIXED LOGIC) ---
-    // Return: [ATK, DEF, CRIT_RATE, HP, SPEED, CRIT_DMG] (Bonus values only)
     private int[] calculatePlayerStats(Character c) {
         double[] flatStats = new double[6];
         double[] percentStats = new double[6];
@@ -199,7 +201,6 @@ public class BattleService {
                 try {
                     List<SubStatDTO> subs = objectMapper.readValue(ui.getSubStats(), new TypeReference<List<SubStatDTO>>() {});
                     for (SubStatDTO sub : subs) {
-                        // [FIX QUAN TRỌNG] Đổi getType() thành getCode()
                         parseStatToArrays(sub.getCode(), sub.getValue(), flatStats, percentStats);
                     }
                 } catch (Exception e) {
@@ -323,12 +324,7 @@ public class BattleService {
         result.setDroppedItemRarity(rarity.name());
     }
 
-    // --- HELPER METHODS ---
-    private User getCurrentUser() {
-        return userRepo.findByUsername(SecurityContextHolder.getContext().getAuthentication().getName())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-    }
-
+    // --- Win/Loss/Build Result Helpers ---
     private BattleResult handleWin(BattleSession session, Character character) {
         BattleResult res = buildResult(session, "🏆 Chiến thắng!", "VICTORY");
         Enemy enemyRef = enemyRepo.findById(session.getEnemyId()).orElse(null);

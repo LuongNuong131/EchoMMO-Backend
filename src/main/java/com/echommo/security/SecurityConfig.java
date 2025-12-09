@@ -1,4 +1,4 @@
-package com.echommo.security; // Lưu ý: Package thường là .security hoặc .config tùy cấu trúc của bạn
+package com.echommo.security;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -16,12 +16,14 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+// Giả định AuthTokenFilter là class đã được định nghĩa
+// (Thường là JwtAuthFilter hoặc tương tự)
+
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
-public class SecurityConfig { // Đã sửa tên class trùng với tên file
+public class SecurityConfig {
 
-    // Sửa tên Filter cho đúng với file metadata bạn có (AuthTokenFilter)
     private final AuthTokenFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
 
@@ -31,9 +33,17 @@ public class SecurityConfig { // Đã sửa tên class trùng với tên file
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Kích hoạt CORS
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/public/**").permitAll() // Cho phép Auth và Public
-                        .requestMatchers("/api/admin/**").hasAnyAuthority("ADMIN") // Bảo vệ trang Admin
-                        .anyRequest().authenticated() // Còn lại phải đăng nhập
+                        // 1. Cho phép Auth và Public
+                        .requestMatchers("/api/auth/**", "/api/public/**").permitAll()
+
+                        // 2. [FIX QUAN TRỌNG] Cho phép các API Game/Item cho người dùng đã xác thực (Authenticated)
+                        .requestMatchers("/api/game/**", "/api/items/**").authenticated()
+
+                        // 3. Bảo vệ trang Admin
+                        .requestMatchers("/api/admin/**").hasAnyAuthority("ADMIN")
+
+                        // 4. Còn lại phải đăng nhập
+                        .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)

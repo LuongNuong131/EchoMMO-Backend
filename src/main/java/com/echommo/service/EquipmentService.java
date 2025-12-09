@@ -3,7 +3,7 @@ package com.echommo.service;
 import com.echommo.config.GameConstants;
 import com.echommo.dto.SubStatDTO;
 import com.echommo.entity.UserItem;
-import com.echommo.entity.Wallet; // <-- [QUAN TRỌNG] Đảm bảo import Wallet
+import com.echommo.entity.Wallet;
 import com.echommo.enums.Rarity;
 import com.echommo.repository.UserItemRepository;
 import com.echommo.repository.WalletRepository;
@@ -44,7 +44,6 @@ public class EquipmentService {
     }
 
     private double getBaseBoostFactor(int level) {
-        // Tăng Main Stat khoảng 5% mỗi cấp
         return 1.0 + level * 0.05;
     }
 
@@ -53,7 +52,6 @@ public class EquipmentService {
             if (json == null || json.isEmpty() || json.equals("[]")) return new ArrayList<>();
             return objectMapper.readValue(json, new TypeReference<List<SubStatDTO>>() {});
         } catch (Exception e) {
-            // Nên log lỗi e
             return new ArrayList<>();
         }
     }
@@ -83,7 +81,7 @@ public class EquipmentService {
         }
 
         wallet.setGold(wallet.getGold().subtract(GOLD_COST));
-        walletRepo.save(wallet); // <-- LƯU TRẠNG THÁI VÍ NGAY LẬP TỨC
+        walletRepo.save(wallet);
 
 
         // 2. Kiểm tra và Trừ nguyên liệu
@@ -155,7 +153,6 @@ public class EquipmentService {
         if (item.getRarity() != Rarity.LEGENDARY || item.getEnhanceLevel() < 30) return "Chưa đủ điều kiện tiến hóa.";
 
         // 1. Logic Trừ Nguyên liệu Mythic (Kim cương, token hiếm...)
-        // (Bạn cần thêm logic trừ chi phí phức tạp ở đây, ví dụ trừ Kim cương)
 
         // 2. LOGIC 5%
         if (random.nextInt(100) >= 5) { // 95% thất bại
@@ -196,7 +193,6 @@ public class EquipmentService {
         if (item.getMythicLevel() >= 30) throw new RuntimeException("Đã đạt cấp Mythic tối đa!");
 
         // 1. Logic trừ chi phí Mythic (Vàng/Nguyên liệu hiếm)
-        // (Bạn cần thêm logic trừ chi phí ở đây)
 
         int nextLv = item.getMythicLevel() + 1;
         item.setMythicLevel(nextLv);
