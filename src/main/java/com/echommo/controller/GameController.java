@@ -1,9 +1,10 @@
 package com.echommo.controller;
 
-import com.echommo.entity.User;
-import com.echommo.entity.UserItem;
-import com.echommo.service.BattleService;
 import com.echommo.service.GameService;
+import com.echommo.service.EquipmentService; // <-- [FIX] Import EquipmentService
+import com.echommo.entity.UserItem;
+import com.echommo.entity.User;
+import com.echommo.entity.Character;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,100 +14,78 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/game")
-@CrossOrigin(origins = "http://localhost:5173")
 public class GameController {
 
-    @Autowired private GameService gameService;
-    @Autowired private BattleService battleService;
+    @Autowired
+    private GameService gameService;
 
-    // --- PLAYER & INFO ---
+    // [FIX] Inject EquipmentService để xử lý cường hóa
+    @Autowired
+    private EquipmentService equipmentService;
 
-    @GetMapping("/player/{id}")
-    public ResponseEntity<User> getPlayer(@PathVariable Integer id) {
-        return ResponseEntity.ok(gameService.getPlayerOrCreate(id));
-    }
+    // 1. --- Core Game Actions ---
 
-    @GetMapping("/inventory/{playerId}")
-    public ResponseEntity<List<UserItem>> getInventory(@PathVariable Integer playerId) {
-        return ResponseEntity.ok(gameService.getInventory(playerId));
-    }
-
-    // --- GAME ACTIONS ---
-
-    @PostMapping("/explore")
-    public ResponseEntity<Map<String, Object>> explore(@RequestParam Integer playerId) {
-        return ResponseEntity.ok(gameService.explore(playerId));
-    }
-
-    @PostMapping("/rest")
-    public ResponseEntity<User> rest(@RequestParam Integer playerId) {
+    @GetMapping("/explore/{userId}")
+    public ResponseEntity<Map<String, Object>> explore(@PathVariable Integer userId) {
         try {
-            return ResponseEntity.ok(gameService.restAtInn(playerId));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build(); // Hoặc trả về message lỗi
-        }
-    }
-
-    @PostMapping("/equip")
-    public ResponseEntity<Map<String, Object>> equip(@RequestParam Integer playerId, @RequestParam Long itemId) {
-        try {
-            return ResponseEntity.ok(gameService.equipItem(playerId, itemId));
+            return ResponseEntity.ok(gameService.explore(userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    @PostMapping("/unequip")
-    public ResponseEntity<Map<String, Object>> unequip(@RequestParam Integer playerId, @RequestParam Long itemId) {
+    @PostMapping("/rest/{userId}")
+    public ResponseEntity<User> restAtInn(@PathVariable Integer userId) {
         try {
-            return ResponseEntity.ok(gameService.unequipItem(playerId, itemId));
+            return ResponseEntity.ok(gameService.restAtInn(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+
+    // 2. --- [FIXED METHOD] ITEM ENHANCEMENT ---
+
+    // Phương thức này đang gọi lỗi (L72) và cần chuyển hướng đến EquipmentService
+    @PostMapping("/item/enhance/{itemId}")
+    public ResponseEntity<?> enhanceItem(@PathVariable("itemId") Long userItemId,
+                                         @RequestParam Integer userId) {
+        try {
+            // [FIX] Gọi đúng phương thức trong EquipmentService
+            UserItem updatedItem = equipmentService.upgradeItem(userItemId, userId);
+            return ResponseEntity.ok(updatedItem);
+
+        } catch (RuntimeException e) {
+            // RuntimeException bắt lỗi thiếu nguyên liệu, item không chính chủ...
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Lỗi hệ thống không xác định.");
+        }
+    }
+
+    // 3. --- Inventory & Equip Actions ---
+
+    @GetMapping("/inventory/{userId}")
+    public ResponseEntity<List<UserItem>> getInventory(@PathVariable Integer userId) {
+        return ResponseEntity.ok(gameService.getInventory(userId));
+    }
+
+    @PostMapping("/item/equip/{itemId}")
+    public ResponseEntity<Map<String, Object>> equipItem(@PathVariable("itemId") Long userItemId, @RequestParam Integer userId) {
+        try {
+            // Giả định gameService có logic equip
+            return ResponseEntity.ok(gameService.equipItem(userId, userItemId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // [BỔ SUNG] Endpoint Enhance mà Service có nhưng Controller bị thiếu
-    @PostMapping("/enhance")
-    public ResponseEntity<?> enhance(@RequestParam Integer playerId, @RequestParam Long itemId) {
+    @PostMapping("/item/unequip/{itemId}")
+    public ResponseEntity<Map<String, Object>> unequipItem(@PathVariable("itemId") Long userItemId, @RequestParam Integer userId) {
         try {
-            return ResponseEntity.ok(gameService.enhanceItem(playerId, itemId));
+            // Giả định gameService có logic unequip
+            return ResponseEntity.ok(gameService.unequipItem(userId, userItemId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
-    }
-
-    // --- BATTLE SYSTEM ---
-
-    @PostMapping("/battle/start")
-    public ResponseEntity<?> startBattle() {
-        try {
-            return ResponseEntity.ok(battleService.startBattle());
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @PostMapping("/attack")
-    public ResponseEntity<?> attack(@RequestBody Map<String, Object> payload) {
-        try {
-            return ResponseEntity.ok(battleService.attackEnemy(payload));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @PostMapping("/skill")
-    public ResponseEntity<?> useSkill(@RequestBody Map<String, Object> payload) {
-        try {
-            return ResponseEntity.ok(battleService.attackEnemy(payload));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @GetMapping("/skills")
-    public ResponseEntity<?> getSkills() {
-        return ResponseEntity.ok(battleService.getAllSkills());
     }
 }

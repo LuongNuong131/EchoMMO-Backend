@@ -4,9 +4,13 @@ import com.echommo.enums.Rarity;
 import com.echommo.enums.SlotType;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor; // <--- Cần thêm NoArgsConstructor
+import lombok.AllArgsConstructor; // <--- Cần thêm AllArgsConstructor
 
 @Entity
 @Data
+@NoArgsConstructor // Thêm annotation này
+@AllArgsConstructor // Thêm annotation này
 @Table(name = "items")
 public class Item {
     @Id
@@ -42,5 +46,5 @@ public class Item {
     private Integer hp;
     private Integer speed;
 
-    public Item() {}
+    // public Item() {} <--- Có thể xóa constructor thủ công này
 }
