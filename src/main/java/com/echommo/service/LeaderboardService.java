@@ -1,68 +1,59 @@
 package com.echommo.service;
 
-import com.echommo.dto.LeaderboardEntry;
+import com.echommo.dto.LeaderboardEntry; // Đảm bảo đã có file này như hướng dẫn trước
 import com.echommo.entity.Character;
-import com.echommo.entity.Wallet;
 import com.echommo.repository.CharacterRepository;
-import com.echommo.repository.WalletRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class LeaderboardService {
 
     @Autowired
-    private CharacterRepository characterRepository;
+    private CharacterRepository charRepo;
 
-    @Autowired
-    private WalletRepository walletRepository;
-
-    // BXH Cấp Độ
+    // 1. Hàm lấy BXH Level (Sửa tên từ getTopPlayers -> getLevelLeaderboard)
     public List<LeaderboardEntry> getLevelLeaderboard() {
-        // Giả định phương thức này đã được khai báo trong CharacterRepository
-        List<Character> chars = characterRepository.findTop10ByOrderByLvDescExpDesc();
-        List<LeaderboardEntry> result = new ArrayList<>();
+        // Lấy list nhân vật, sắp xếp theo Level giảm dần, nếu bằng Level thì so EXP
+        List<Character> characters = charRepo.findAll(Sort.by(Sort.Direction.DESC, "level", "currentExp"));
 
-        for (int i = 0; i < chars.size(); i++) {
-            Character c = chars.get(i);
-            // FIX: Sử dụng c.getLv() thay vì getLevel()
-            String name = c.getName() != null ? c.getName() : c.getUser().getUsername();
+        // Chỉ lấy Top 10 và chuyển sang DTO LeaderboardEntry
+        return characters.stream()
+                .limit(10)
+                .map(c -> {
+                    String name = (c.getName() != null) ? c.getName() : "Unknown";
+                    // Nếu chưa có tên Character thì lấy tên User (nếu có quan hệ)
+                    if (c.getName() == null && c.getUser() != null) {
+                        name = c.getUser().getUsername();
+                    }
 
-            result.add(new LeaderboardEntry(
-                    name,
-                    "Cấp " + c.getLv(),
-                    "#" + (i + 1),
-                    name.substring(0, 1).toUpperCase()
-            ));
-        }
-        return result;
+                    // Trả về DTO: name, value (level)
+                    return new LeaderboardEntry(name, c.getLevel());
+                })
+                .collect(Collectors.toList());
     }
 
-    // BXH Đại Gia (Vàng)
+    // 2. Hàm lấy BXH Tài sản (Thêm mới để Controller không báo lỗi)
     public List<LeaderboardEntry> getWealthLeaderboard() {
-        // Giả định phương thức này đã được khai báo trong WalletRepository
-        List<Wallet> wallets = walletRepository.findTop10ByOrderByGoldDesc();
-        List<LeaderboardEntry> result = new ArrayList<>();
+        // Giả sử field tiền là "gold", sắp xếp giảm dần
+        // Lưu ý: Nếu trong entity Character chưa có "gold", hãy thêm field đó vào hoặc đổi tên field cho đúng
+        List<Character> characters = charRepo.findAll(Sort.by(Sort.Direction.DESC, "gold"));
 
-        for (int i = 0; i < wallets.size(); i++) {
-            Wallet w = wallets.get(i);
-
-            // Lấy tên từ User
-            String name = w.getUser().getUsername();
-
-            // Sử dụng longValue() để đảm bảo chuyển đổi từ BigDecimal
-            String goldString = w.getGold().longValue() + " 🟡";
-
-            result.add(new LeaderboardEntry(
-                    name,
-                    goldString,
-                    "#" + (i + 1),
-                    name.substring(0, 1).toUpperCase()
-            ));
-        }
-        return result;
+        return characters.stream()
+                .limit(10)
+                .map(c -> {
+                    String name = (c.getName() != null) ? c.getName() : "Unknown";
+                    if (c.getName() == null && c.getUser() != null) {
+                        name = c.getUser().getUsername();
+                    }
+                    // Trả về DTO: name, value (gold)
+                    return new LeaderboardEntry(name, c.getGold());
+                })
+                .collect(Collectors.toList());
     }
 }

@@ -4,55 +4,43 @@ import com.echommo.enums.Rarity;
 import com.echommo.enums.SlotType;
 import jakarta.persistence.*;
 import lombok.Data;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "items")
 @Data
+@Table(name = "items")
 public class Item {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "item_id")
     private Integer itemId;
 
-    @Column(nullable = false)
     private String name;
 
-    private String description;
+    private String type; // MATERIAL, WEAPON, ARMOR, CONSUMABLE
 
-    @Column(nullable = false)
-    private String type; // WEAPON, ARMOR, CONSUMABLE...
+    @Enumerated(EnumType.STRING)
+    private Rarity rarity; // COMMON, RARE, EPIC...
+
+    private Integer tier; // Cấp bậc (1, 2, 3...)
+
+    @Column(name = "image_url")
+    private String imageUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "slot_type")
-    private SlotType slotType;
+    private SlotType slotType; // NONE, WEAPON, HELMET, ARMOR...
 
-    private Integer tier;
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "rarity_default")
-    private Rarity rarityDefault;
+    // 👇 [FIX] Thêm giá cơ bản để MarketplaceService không báo lỗi
+    @Column(name = "base_price", columnDefinition = "int default 10")
+    private Integer basePrice = 10;
 
-    @Column(name = "base_price")
-    private BigDecimal basePrice;
+    // Chỉ số cơ bản (nếu là trang bị)
+    private Integer attack;
+    private Integer defense;
+    private Integer hp;
+    private Integer speed;
 
-    @Column(name = "image_url")
-    private String imageUrl; // Lưu tên file, vd: "s_sword_0"
-
-    @Column(name = "is_system_item")
-    private Boolean isSystemItem;
-
-    // Base Stats (Hiển thị cho shop/item gốc)
-    @Column(name = "atk_bonus")
-    private Integer atkBonus;
-
-    @Column(name = "def_bonus")
-    private Integer defBonus;
-
-    @Column(name = "hp_bonus")
-    private Integer hpBonus;
-
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    public Item() {}
 }

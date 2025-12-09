@@ -1,7 +1,7 @@
 package com.echommo.controller;
 
-import com.echommo.entity.Item;
 import com.echommo.entity.User;
+import com.echommo.entity.UserItem; // [FIX] Import UserItem
 import com.echommo.service.BattleService;
 import com.echommo.service.GameService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +33,6 @@ public class GameController {
         }
     }
 
-    // [FIX] Gọi logic Battle mới
     @PostMapping("/attack")
     public ResponseEntity<?> attack(@RequestBody Map<String, Object> payload) {
         try {
@@ -54,32 +53,34 @@ public class GameController {
         return gameService.restAtInn(playerId);
     }
 
+    // [FIX] Return List<UserItem> thay vì List<Item> để khớp với Service
     @GetMapping("/inventory/{playerId}")
-    public List<Item> getInventory(@PathVariable Integer playerId) {
+    public List<UserItem> getInventory(@PathVariable Integer playerId) {
         return gameService.getInventory(playerId);
     }
 
+    // [FIX] itemId đổi thành Long để khớp với Service
     @PostMapping("/equip")
-    public Map<String, Object> equip(@RequestParam Integer playerId, @RequestParam Integer itemId) {
+    public Map<String, Object> equip(@RequestParam Integer playerId, @RequestParam Long itemId) {
         return gameService.equipItem(playerId, itemId);
     }
 
+    // [FIX] itemId đổi thành Long
     @PostMapping("/unequip")
-    public Map<String, Object> unequip(@RequestParam Integer playerId, @RequestParam Integer itemId) {
+    public Map<String, Object> unequip(@RequestParam Integer playerId, @RequestParam Long itemId) {
         return gameService.unequipItem(playerId, itemId);
     }
 
-    // Skill endpoint mapping
     @PostMapping("/skill")
     public ResponseEntity<?> useSkill(@RequestBody Map<String, Object> payload) {
         try {
-            // Tạm thời dùng chung logic attack vì skill cũng là 1 dạng attack có buff/effect
             return ResponseEntity.ok(battleService.attackEnemy(payload));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
+    // [FIX] Gọi hàm getAllSkills() đã được thêm bên Service
     @GetMapping("/skills")
     public ResponseEntity<?> getSkills() {
         return ResponseEntity.ok(battleService.getAllSkills());

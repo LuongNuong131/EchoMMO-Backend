@@ -21,7 +21,6 @@ public class ExplorationService {
     @Autowired private UserRepository userRepository;
     @Autowired private CaptchaService captchaService;
 
-    // [NEW] Inject thêm các Repo cần thiết cho logic mới
     @Autowired private ItemRepository itemRepo;
     @Autowired private UserItemRepository userItemRepo;
     @Autowired private FlavorTextRepository flavorTextRepo;
@@ -33,7 +32,6 @@ public class ExplorationService {
         try {
             Character c = characterService.getMyCharacter();
 
-            // [AUTO-CREATE] Nếu chưa có nhân vật, tạo ngay
             if (c == null) {
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 User user = userRepository.findByUsername(username)
@@ -42,26 +40,24 @@ public class ExplorationService {
             }
             if (c == null) throw new RuntimeException("Lỗi dữ liệu nhân vật.");
 
-            // Check Anti-cheat
             captchaService.checkLockStatus(c.getUser());
-
-            // [UPDATE] Bỏ logic trừ Energy (Grinding Free)
-            // if (c.getEnergy() < 2) { ... } -> Đã xóa
 
             Random r = new Random();
 
-            // --- A. PHẦN THƯỞNG CỐ ĐỊNH (BASE REWARD) ---
-            int baseExp = 1 + (c.getLv() / 2);
-            int baseCoin = 1 + r.nextInt(3); // 1-3 vàng
+            // --- A. PHẦN THƯỞNG CỐ ĐỊNH ---
+            // [FIX] getLv() -> getLevel()
+            int baseExp = 1 + (c.getLevel() / 2);
+            int baseCoin = 1 + r.nextInt(3);
 
-            c.setExp(c.getExp() + baseExp);
+            // [FIX] setExp/getExp -> setCurrentExp
+            c.setCurrentExp(c.getCurrentExp() + baseExp);
 
             Wallet w = c.getUser().getWallet();
             BigDecimal currentGold = w.getGold() != null ? w.getGold() : BigDecimal.ZERO;
             w.setGold(currentGold.add(BigDecimal.valueOf(baseCoin)));
 
-            // --- B. XỬ LÝ RNG (Sự kiện ngẫu nhiên 45/10/20/25) ---
-            int roll = r.nextInt(100); // 0 - 99
+            // --- B. XỬ LÝ RNG ---
+            int roll = r.nextInt(100);
             String type;
             String msg;
             String rewardName = null;
@@ -69,7 +65,7 @@ public class ExplorationService {
             BigDecimal eventGold = BigDecimal.ZERO;
 
             if (roll < 45) {
-                // 45%: Flavor Text / Weather
+                // 45%: Flavor Text
                 type = "TEXT";
                 boolean isWeather = r.nextBoolean();
                 if (isWeather) {
@@ -81,7 +77,7 @@ public class ExplorationService {
             } else if (roll < 55) {
                 // 10%: Big Gold
                 type = "GOLD";
-                int bigGold = 10 + r.nextInt(41); // 10 - 50 vàng
+                int bigGold = 10 + r.nextInt(41);
                 eventGold = BigDecimal.valueOf(bigGold);
                 w.setGold(w.getGold().add(eventGold));
                 msg = "Bạn đá phải một cái túi nặng trịch. Bên trong là " + bigGold + " Vàng!";
@@ -91,7 +87,8 @@ public class ExplorationService {
             } else if (roll < 75) {
                 // 20%: Item Drop
                 type = "ITEM";
-                Item droppedItem = getResourceByMapLevel(c.getLv(), r);
+                // [FIX] getLv -> getLevel
+                Item droppedItem = getResourceByMapLevel(c.getLevel(), r);
 
                 if (droppedItem != null) {
                     addItemToInventory(c.getUser(), droppedItem, 1);
@@ -112,18 +109,24 @@ public class ExplorationService {
 
             // --- C. CHECK LÊN CẤP ---
             Integer newLv = null;
-            long reqExp = (long) c.getLv() * 100L;
-            if (c.getExp() >= reqExp) {
-                c.setExp(c.getExp() - (int) reqExp);
-                c.setLv(c.getLv() + 1);
+            // [FIX] getLv -> getLevel
+            long reqExp = (long) c.getLevel() * 100L;
+
+            // [FIX] getExp -> getCurrentExp
+            if (c.getCurrentExp() >= reqExp) {
+                c.setCurrentExp(c.getCurrentExp() - (int) reqExp);
+                c.setLevel(c.getLevel() + 1);
                 c.setMaxHp(c.getMaxHp() + 20);
-                c.setHp(c.getMaxHp());
-                c.setEnergy(c.getMaxEnergy());
-                newLv = c.getLv();
+
+                // [FIX] setHp -> setCurrentHp
+                c.setCurrentHp(c.getMaxHp());
+                // [FIX] setEnergy -> setCurrentEnergy
+                c.setCurrentEnergy(c.getMaxEnergy());
+
+                newLv = c.getLevel();
                 msg += " [LÊN CẤP ĐỘ " + newLv + "!]";
             }
 
-            // --- D. LƯU & TRẢ VỀ ---
             characterRepository.save(c);
             walletRepository.save(w);
 
@@ -131,9 +134,9 @@ public class ExplorationService {
                     msg,
                     type,
                     BigDecimal.valueOf(baseCoin).add(eventGold),
-                    c.getExp(),
-                    c.getLv(),
-                    c.getEnergy(),
+                    c.getCurrentExp(), // [FIX]
+                    c.getLevel(),      // [FIX]
+                    c.getCurrentEnergy(), // [FIX]
                     c.getMaxEnergy(),
                     newLv,
                     rewardName,
@@ -146,34 +149,34 @@ public class ExplorationService {
         }
     }
 
-    // --- 2. TÍNH NĂNG KHAI THÁC (GATHERING - GIỮ LẠI ĐỂ KHÔNG LỖI) ---
+    // --- 2. TÍNH NĂNG KHAI THÁC ---
     @Transactional
     public Map<String, Object> gatherResource(String resourceType, int amount) {
         Character c = characterService.getMyCharacter();
         if (c == null) throw new RuntimeException("Chưa có nhân vật");
 
-        // 1. Tính toán tiêu hao (1 Năng lượng / 1 lần khai thác)
         int energyCost = amount;
-        if (c.getEnergy() < energyCost) {
+
+        // [FIX] getEnergy -> getCurrentEnergy
+        if (c.getCurrentEnergy() < energyCost) {
             throw new RuntimeException("Không đủ nội năng! Cần " + energyCost);
         }
 
-        // 2. Trừ năng lượng
-        c.setEnergy(c.getEnergy() - energyCost);
+        // [FIX] setEnergy/getEnergy -> setCurrentEnergy
+        c.setCurrentEnergy(c.getCurrentEnergy() - energyCost);
         characterRepository.save(c);
 
-        // 3. Cộng tài nguyên vào ví
         Wallet w = c.getUser().getWallet();
         String msg = "";
 
         switch (resourceType) {
-            case "wood": // Cây Sồi
-            case "special": // Gỗ Hóa Thạch
+            case "wood":
+            case "special":
                 w.setWood(w.getWood() + amount);
                 msg = "Nhận được " + amount + " Gỗ";
                 break;
-            case "stone": // Đá Tảng
-            case "mining": // Mỏ Đồng
+            case "stone":
+            case "mining":
                 w.setStone(w.getStone() + amount);
                 msg = "Nhận được " + amount + " Đá";
                 break;
@@ -183,10 +186,9 @@ public class ExplorationService {
 
         walletRepository.save(w);
 
-        // 4. Trả về kết quả
         Map<String, Object> result = new HashMap<>();
         result.put("message", msg);
-        result.put("currentEnergy", c.getEnergy());
+        result.put("currentEnergy", c.getCurrentEnergy()); // [FIX]
         result.put("wood", w.getWood());
         result.put("stone", w.getStone());
 
@@ -204,14 +206,13 @@ public class ExplorationService {
         if (level >= 20) possibleItems.add("Quặng Sắt");
         if (level >= 30) possibleItems.add("Bạch Kim");
 
-        // Chọn item ngẫu nhiên từ list
         String itemName = possibleItems.get(r.nextInt(possibleItems.size()));
-
-        // Tìm item trong DB
         return itemRepo.findByName(itemName).stream().findFirst().orElse(null);
     }
 
     private void addItemToInventory(User user, Item item, int amount) {
+        // [FIX] Đổi Integer -> Long cho UserItemId (nếu cần) nhưng ở đây đang dùng findByUser (List)
+        // Logic dưới đây là tìm xem đã có slot item đó chưa để cộng dồn
         UserItem userItem = userItemRepo.findByUser_UserId(user.getUserId())
                 .stream()
                 .filter(ui -> ui.getItem().getItemId().equals(item.getItemId()))

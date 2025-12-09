@@ -1,77 +1,66 @@
 package com.echommo.entity;
 
-import com.echommo.enums.CharacterStatus;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.echommo.enums.CharacterStatus; // [FIX] Import Enum
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 
 @Entity
-@Table(name = "characters")
 @Data
+@Table(name = "characters")
 public class Character {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "char_id")
-    private Integer charId;
+    private Integer characterId;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnore
+    @OneToOne
+    @JoinColumn(name = "user_id", referencedColumnName = "userId")
+    @ToString.Exclude
     private User user;
 
-    @Column(nullable = false, unique = true)
     private String name;
 
-    // [FIX] Đổi tên biến lv -> level để khớp với Service
-    private Integer level;
+    @Column(name = "character_class")
+    private String characterClass = "Nhà Thám Hiểm";
 
-    // [FIX] Đổi tên biến exp -> currentExp
-    @Column(name = "current_exp")
-    private Integer currentExp;
-
-    // --- Hệ thống điểm tiềm năng (Mới) ---
-    @Column(name = "stat_points")
-    private Integer statPoints;
-
-    private Integer str;
-    private Integer vit;
-    private Integer agi;
-
-    // [FIX] Đổi tên hp -> currentHp
-    @Column(name = "current_hp")
-    private Integer currentHp;
-
-    @Column(name = "max_hp")
-    private Integer maxHp;
-
-    // [FIX] Đổi tên energy -> currentEnergy
-    @Column(name = "current_energy")
-    private Integer currentEnergy;
-
-    @Column(name = "max_energy")
-    private Integer maxEnergy;
-
-    // Base Stats
-    @Column(name = "base_atk")
-    private Integer baseAtk;
-
-    @Column(name = "base_def")
-    private Integer baseDef;
-
-    @Column(name = "base_speed")
-    private Integer baseSpeed;
-
-    @Column(name = "base_crit_rate")
-    private Integer baseCritRate;
-
-    @Column(name = "base_crit_dmg")
-    private Integer baseCritDmg;
-
-    @Column(name = "current_location")
-    private String currentLocation;
-
-    // [FIX QUAN TRỌNG] Thêm lại trường status bị thiếu
-    @Enumerated(EnumType.STRING)
+    // 👇 [FIX] Thêm trạng thái nhân vật (IDLE, BATTLE...)
     @Column(name = "status")
-    private CharacterStatus status;
+    @Enumerated(EnumType.STRING)
+    private CharacterStatus status = CharacterStatus.IDLE;
+
+    private Integer level = 1;
+    private Integer currentExp = 0;
+
+    private Integer maxHp = 100;
+    private Integer currentHp = 100;
+
+    private Integer maxEnergy = 100;
+    private Integer currentEnergy = 100;
+
+    private Integer baseAtk = 10;
+    private Integer baseDef = 5;
+
+    @Column(name = "base_speed", columnDefinition = "int default 10")
+    private Integer baseSpeed = 10;
+
+    // Các chỉ số phụ
+    private Integer baseCritRate = 50;
+    private Integer baseCritDmg = 50;
+
+    private Integer statPoints = 0;
+
+    // 4 chỉ số cơ bản
+    @Column(columnDefinition = "int default 5")
+    private Integer str = 5;
+
+    @Column(columnDefinition = "int default 5")
+    private Integer dex = 5;
+
+    @Column(columnDefinition = "int default 5")
+    private Integer intelligence = 5;
+
+    @Column(columnDefinition = "int default 5")
+    private Integer luck = 5;
+
+    public Character() {}
 }

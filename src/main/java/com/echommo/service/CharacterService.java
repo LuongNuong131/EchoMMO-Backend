@@ -61,12 +61,13 @@ public class CharacterService {
         Character c = new Character();
         c.setUser(u);
         c.setName(req.getName());
-        c.setLevel(1); // [FIX] setLv -> setLevel
+        c.setLevel(1);
+        c.setStatus(CharacterStatus.IDLE);
 
         if (u.getRole() == Role.ADMIN) {
             // --- ADMIN SETUP ---
-            c.setCurrentHp(9999); c.setMaxHp(9999); // [FIX] setHp -> setCurrentHp
-            c.setCurrentEnergy(999); c.setMaxEnergy(999); // [FIX] setEnergy -> setCurrentEnergy
+            c.setCurrentHp(9999); c.setMaxHp(9999);
+            c.setCurrentEnergy(999); c.setMaxEnergy(999);
 
             c.setBaseAtk(999);
             c.setBaseDef(999);
@@ -77,25 +78,27 @@ public class CharacterService {
             // Set stats khủng cho admin
             c.setStatPoints(9999);
             c.setStr(999);
-            c.setVit(999);
-            c.setAgi(999);
+            c.setDex(999);          // [FIX] Agi -> Dex
+            c.setIntelligence(999); // [FIX] Vit -> Intelligence
+            c.setLuck(999);         // [FIX] Thêm Luck
         } else {
             // --- USER THƯỜNG SETUP ---
-            // 1. Khởi tạo chỉ số tiềm năng mặc định
+            // 1. Khởi tạo chỉ số tiềm năng mặc định (Mỗi loại 5 điểm)
             c.setStatPoints(5);
             c.setStr(5);
-            c.setVit(5);
-            c.setAgi(5);
+            c.setDex(5);           // [FIX] Agi -> Dex
+            c.setIntelligence(5);  // [FIX] Vit -> Intelligence
+            c.setLuck(5);          // [FIX] Thêm Luck
 
             // 2. Tính toán chỉ số chiến đấu từ tiềm năng
             recalculateDerivedStats(c);
 
             // 3. Set các chỉ số còn lại
             c.setBaseCritRate(50); // 5%
-            c.setCurrentEnergy(50); c.setMaxEnergy(50); // [FIX] setEnergy -> setCurrentEnergy
+            c.setCurrentEnergy(50);
+            c.setMaxEnergy(50);
         }
 
-        c.setStatus(CharacterStatus.IDLE);
         c = charRepo.save(c);
 
         // Tặng đồ tân thủ
@@ -124,14 +127,15 @@ public class CharacterService {
     // 👇 LOGIC CỘNG ĐIỂM TIỀM NĂNG & TÍNH STATS
     // =========================================================
 
+    // [FIX] Đổi tham số thành: str, dex, intelligence, luck
     @Transactional
-    public Character addStats(int str, int vit, int agi) {
+    public Character addStats(int str, int dex, int intelligence, int luck) {
         Character character = getMyCharacter();
         if (character == null) {
             throw new RuntimeException("Không tìm thấy nhân vật");
         }
 
-        int totalPointsNeeded = str + vit + agi;
+        int totalPointsNeeded = str + dex + intelligence + luck;
         if (totalPointsNeeded <= 0) {
             throw new RuntimeException("Số điểm cộng phải lớn hơn 0");
         }
@@ -145,8 +149,9 @@ public class CharacterService {
 
         // 2. Cộng dồn vào chỉ số gốc (xử lý null safe)
         character.setStr((character.getStr() == null ? 5 : character.getStr()) + str);
-        character.setVit((character.getVit() == null ? 5 : character.getVit()) + vit);
-        character.setAgi((character.getAgi() == null ? 5 : character.getAgi()) + agi);
+        character.setDex((character.getDex() == null ? 5 : character.getDex()) + dex);
+        character.setIntelligence((character.getIntelligence() == null ? 5 : character.getIntelligence()) + intelligence);
+        character.setLuck((character.getLuck() == null ? 5 : character.getLuck()) + luck);
 
         // 3. Tính toán lại các chỉ số chiến đấu
         recalculateDerivedStats(character);
@@ -155,30 +160,36 @@ public class CharacterService {
     }
 
     /**
-     * Hàm tính toán lại chỉ số cơ bản dựa trên điểm tiềm năng (STR, VIT, AGI)
+     * Hàm tính toán lại chỉ số cơ bản dựa trên điểm tiềm năng (STR, DEX, INT, LUCK)
      */
     private void recalculateDerivedStats(Character c) {
         int baseHpConstant = 100;
         int baseAtkConstant = 10;
         int baseDefConstant = 5;
         int baseSpeedConstant = 10;
-        int baseCritDmgConstant = 150;
 
-        // Tính HP
-        int newMaxHp = baseHpConstant + ((c.getVit() == null ? 0 : c.getVit()) * 10);
+        // --- QUY ƯỚC TÍNH STATS MỚI ---
+
+        // 1. STR (Sức mạnh) -> Tăng ATK và HP nhẹ
+        int str = c.getStr() == null ? 0 : c.getStr();
+        c.setBaseAtk(baseAtkConstant + (str * 2));
+
+        // 2. DEX (Khéo léo) -> Tăng Tốc độ và Crit Rate
+        int dex = c.getDex() == null ? 0 : c.getDex();
+        c.setBaseSpeed(baseSpeedConstant + (dex / 2));
+        // Base Crit = 50 (5%) + Dex (ví dụ 1 Dex = 0.1% Crit)
+        c.setBaseCritRate(50 + (dex * 2));
+
+        // 3. INT (Trí tuệ) -> Tăng Max HP và Def (Thay cho VIT cũ)
+        int intel = c.getIntelligence() == null ? 0 : c.getIntelligence();
+        int newMaxHp = baseHpConstant + (intel * 15) + (str * 5); // HP chủ yếu từ Int (cơ thể cường tráng do tu luyện nội công :v)
         c.setMaxHp(newMaxHp);
-        c.setCurrentHp(newMaxHp); // [FIX] setHp -> setCurrentHp
+        c.setCurrentHp(newMaxHp); // Hồi full máu khi update stats
 
-        // Tính ATK
-        c.setBaseAtk(baseAtkConstant + ((c.getStr() == null ? 0 : c.getStr()) * 2));
+        c.setBaseDef(baseDefConstant + (intel * 1));
 
-        // Tính DEF
-        c.setBaseDef(baseDefConstant + ((c.getVit() == null ? 0 : c.getVit()) * 1));
-
-        // Tính Speed (2 AGI = 1 Speed)
-        c.setBaseSpeed(baseSpeedConstant + ((c.getAgi() == null ? 0 : c.getAgi()) / 2));
-
-        // Tính Crit Dmg (2 STR = 1% Crit Dmg)
-        c.setBaseCritDmg(baseCritDmgConstant + ((c.getStr() == null ? 0 : c.getStr()) / 2));
+        // 4. LUCK (May mắn) -> Tăng Crit Damage
+        int luck = c.getLuck() == null ? 0 : c.getLuck();
+        c.setBaseCritDmg(150 + (luck * 1)); // 1 Luck = +1% Crit Damage
     }
 }

@@ -3,27 +3,32 @@ package com.echommo.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
-@Data
 @Entity
+@Data
 @Table(name = "enemies")
 public class Enemy {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "enemy_id")
     private Integer enemyId;
 
     private String name;
-    private Integer level;
     private Integer hp;
     private Integer atk;
     private Integer def;
 
-    @Column(name = "exp_reward")
-    private Integer expReward;
+    // 👇 CÁC CỘT MỚI BẮT BUỘC PHẢI CÓ
+    @Column(columnDefinition = "int default 10")
+    private Integer speed = 10;
 
-    @Column(name = "gold_reward")
-    private Integer goldReward;
+    @Column(name = "exp_reward", columnDefinition = "int default 10")
+    private Integer expReward = 10;
 
+    @Column(name = "gold_reward", columnDefinition = "int default 10")
+    private Integer goldReward = 10;
+
+    // Hình ảnh quái (để hiển thị frontend sau này)
     @Column(name = "image_url")
     private String imageUrl;
+
+    public Enemy() {}
 }
