@@ -33,13 +33,14 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
         // 3. Trả về đối tượng User của Spring Security
         // [QUAN TRỌNG] Dùng user.getPasswordHash() thay vì getPassword()
+        // Vì passwordHash mới là chuỗi mã hóa BCrypt dùng để so sánh
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPasswordHash(),
-                user.getIsActive(),     // enabled
+                user.getIsActive() != null ? user.getIsActive() : true, // enabled (mặc định true nếu null)
                 true,                   // accountNonExpired
                 true,                   // credentialsNonExpired
-                true,                   // accountNonLocked
+                user.getIsCaptchaLocked() == null || !user.getIsCaptchaLocked(), // accountNonLocked (không bị khóa captcha)
                 authorities
         );
     }

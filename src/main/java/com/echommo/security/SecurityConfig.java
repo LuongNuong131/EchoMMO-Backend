@@ -53,6 +53,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
+                    // Cho phép mọi nguồn (trong môi trường dev), hoặc cụ thể http://localhost:5173
                     config.setAllowedOriginPatterns(List.of("*"));
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
                     config.setAllowedHeaders(List.of("*"));
@@ -61,16 +62,18 @@ public class SecurityConfig {
                 }))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Cho phép các request cấu hình (Pre-flight)
+                        // 1. Cho phép các request cấu hình (Pre-flight) đi qua
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 2. Các API công khai (Đăng nhập, Đăng ký, Quên mật khẩu, Báo lỗi)
+                        // 2. Các API công khai không cần đăng nhập
                         .requestMatchers("/api/auth/**", "/api/test/**", "/api/report/**").permitAll()
 
                         // 3. Tài nguyên tĩnh (Hình ảnh, CSS, JS)
                         .requestMatchers("/images/**", "/assets/**", "/*.html", "/*.js", "/*.css").permitAll()
 
-                        // 4. [QUAN TRỌNG] Cấp quyền cho các tính năng trong game (Cần đăng nhập)
+                        // 4. [QUAN TRỌNG] Cấp quyền cho các tính năng game (Cần đăng nhập)
+                        // Nếu không có đoạn này, mặc định sẽ rơi vào anyRequest().authenticated()
+                        // Nhưng khai báo rõ ràng giúp dễ debug và tránh xung đột
                         .requestMatchers("/api/game/**").authenticated()
                         .requestMatchers("/api/battle/**").authenticated()
                         .requestMatchers("/api/market/**").authenticated()      // Mua bán
@@ -80,13 +83,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/friend/**").authenticated()      // Bạn bè
                         .requestMatchers("/api/chat/**").authenticated()        // Chat
                         .requestMatchers("/api/notification/**").authenticated()// Thông báo
+                        .requestMatchers("/api/user/**").authenticated()        // Thông tin user
 
-                        // 5. Tất cả các request còn lại đều phải đăng nhập
+                        // 5. Tất cả các request còn lại bắt buộc phải đăng nhập
                         .anyRequest().authenticated()
                 );
 
         http.authenticationProvider(authenticationProvider());
         http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 }
