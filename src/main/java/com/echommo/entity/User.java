@@ -27,6 +27,10 @@ public class User {
     @JsonIgnoreProperties
     private String passwordHash;
 
+    // [FIX] Cột này trong DB là NOT NULL, cần map chính xác.
+    // Lưu ý: Việc lưu password plain-text là không bảo mật,
+    // nhưng để khớp với DB cũ/yêu cầu của bạn thì phải thêm vào.
+    @Column(name = "password", nullable = false)
     private String password;
 
     @Column(nullable = false, unique = true)
@@ -38,12 +42,11 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Role role = Role.USER;
 
-    // [GIỮ NGUYÊN] Quan hệ với Wallet
+    // Quan hệ với Wallet
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Wallet wallet;
 
-    // [FIX MỚI] Thêm quan hệ với Character để GameService gọi được user.getCharacter()
-    // Lưu ý: Logic game này đang giả định 1 User chỉ có 1 Character chính
+    // Quan hệ với Character
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Character character;
 

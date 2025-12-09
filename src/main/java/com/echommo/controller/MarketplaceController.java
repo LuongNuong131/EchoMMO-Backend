@@ -1,13 +1,11 @@
 package com.echommo.controller;
 
 import com.echommo.dto.CreateListingRequest;
-import com.echommo.entity.MarketListing;
 import com.echommo.service.MarketplaceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -41,9 +39,8 @@ public class MarketplaceController {
     }
 
     @PostMapping("/sell")
-    public ResponseEntity<?> sellToShop(@RequestBody Map<String, Object> body) { // [FIX] Map<String, Object> để handle Long
+    public ResponseEntity<?> sellToShop(@RequestBody Map<String, Object> body) {
         try {
-            // [FIX] Ép kiểu an toàn từ Integer/Long trong JSON sang Long
             Long userItemId = ((Number) body.get("userItemId")).longValue();
             Integer quantity = ((Number) body.get("quantity")).intValue();
             return ResponseEntity.ok(service.sellItem(userItemId, quantity));
@@ -61,6 +58,19 @@ public class MarketplaceController {
         }
     }
 
+    // [FIX START] Sửa lỗi 403 gây Logout: Thêm endpoint hỗ trợ gọi ID trên URL
+    @PostMapping("/buy/{id}")
+    public ResponseEntity<?> buyListingByPath(@PathVariable Integer id, @RequestBody(required = false) Map<String, Integer> body) {
+        try {
+            // Mặc định mua 1 nếu không gửi quantity
+            int quantity = (body != null && body.containsKey("quantity")) ? body.get("quantity") : 1;
+            return ResponseEntity.ok(service.buyPlayerListing(id, quantity));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Giữ lại endpoint cũ (nhận body) để tương thích nếu chỗ khác dùng
     @PostMapping("/buy")
     public ResponseEntity<?> buyListing(@RequestBody Map<String, Integer> body) {
         try {
@@ -69,6 +79,7 @@ public class MarketplaceController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+    // [FIX END]
 
     @PostMapping("/cancel/{id}")
     public ResponseEntity<?> cancelListing(@PathVariable Integer id) {

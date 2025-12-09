@@ -1,8 +1,6 @@
 package com.echommo.repository;
 
-import com.echommo.entity.Item;
-import com.echommo.enums.Rarity;
-import com.echommo.enums.SlotType;
+import com.echommo.entity.UserItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -10,16 +8,11 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ItemRepository extends JpaRepository<Item, Integer> {
+public interface UserItemRepository extends JpaRepository<UserItem, Long> {
 
-    Optional<Item> findByName(String name);
+    // Sửa: Tìm theo User Entity ID (dấu gạch dưới giúp JPA hiểu ta đang chọc vào object User lấy ID)
+    List<UserItem> findByUser_Id(Long userId);
 
-    List<Item> findByType(String type);
-
-    List<Item> findBySlotType(SlotType slotType);
-
-    List<Item> findByRarity(Rarity rarity);
-
-    // [FIX] Đã XÓA hàm deleteByUser vì Item không có trường User.
-    // Item là dữ liệu hệ thống, không được xóa theo User.
+    // Tìm item cụ thể của user (ví dụ để kiểm tra sở hữu)
+    Optional<UserItem> findByUser_IdAndUserItemId(Long userId, Long userItemId);
 }

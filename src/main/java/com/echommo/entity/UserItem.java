@@ -1,51 +1,79 @@
 package com.echommo.entity;
 
 import com.echommo.enums.Rarity;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDateTime; // Import mới cho lỗi setAcquiredAt
 
 @Entity
-@Data
 @Table(name = "user_items")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class UserItem {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "user_item_id")
     private Long userItemId;
 
-    // [FIX] Thêm @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnore
     private User user;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "item_id", nullable = false)
     private Item item;
 
-    private Integer quantity = 1;
+    @Column(name = "is_equipped")
     private Boolean isEquipped = false;
-    private Boolean isLocked = false;
 
-    @Enumerated(EnumType.STRING)
-    private Rarity rarity = Rarity.COMMON;
+    // --- XỬ LÝ XUNG ĐỘT TÊN GỌI (Enhance vs Enhancement) ---
 
-    private Integer enhanceLevel = 0;
+    // Chúng ta chọn 'enhancementLevel' làm tên chính trong Database
+    @Column(name = "enhancement_level")
+    private Integer enhancementLevel = 0;
+    // Lombok sẽ tự sinh: getEnhancementLevel(), setEnhancementLevel() -> Fix InventoryServiceImpl
 
-    private String mainStatType;
-    private BigDecimal mainStatValue;
+    // Thêm thủ công 2 hàm này để chiều lòng MarketplaceService (fix lỗi cũ)
+    public Integer getEnhanceLevel() {
+        return this.enhancementLevel;
+    }
 
-    @Column(columnDefinition = "json")
-    private String subStats; // Lưu JSON String
+    public void setEnhanceLevel(Integer level) {
+        this.enhancementLevel = level;
+    }
 
+    // --- CÁC FIELD MỚI THÊM ---
+
+    // Fix lỗi: setAcquiredAt(LocalDateTime)
+    @Column(name = "acquired_at")
     private LocalDateTime acquiredAt;
 
+    // --- CÁC FIELD CŨ ---
+
+    private Integer quantity;
+
+    @Enumerated(EnumType.STRING)
+    private Rarity rarity;
+
+    private String mainStatType;
+
+    private BigDecimal mainStatValue;
+
+    @Column(columnDefinition = "TEXT")
+    private String subStats;
+
+    // Hàm tiện ích: Tự động set thời gian khi tạo mới (Optional)
     @PrePersist
-    public void onCreate() {
-        this.acquiredAt = LocalDateTime.now();
+    protected void onCreate() {
+        if (acquiredAt == null) {
+            acquiredAt = LocalDateTime.now();
+        }
     }
 }

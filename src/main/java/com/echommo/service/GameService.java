@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 @Service
@@ -76,22 +77,19 @@ public class GameService {
                 UserItem ui = userItemRepo.findByUser_UserIdAndItem_ItemId(userId, matItem.getItemId())
                         .orElse(new UserItem());
 
-                // [FIXED] Sửa lỗi getId() -> getUserItemId()
                 if (ui.getUserItemId() == null) {
                     ui.setUser(character.getUser());
                     ui.setItem(matItem);
                     ui.setQuantity(0);
                     ui.setIsEquipped(false);
                     ui.setEnhanceLevel(0);
-                    ui.setMainStatValue(BigDecimal.ZERO); // Tránh null
+                    ui.setMainStatValue(BigDecimal.ZERO);
                     ui.setRarity(Rarity.COMMON);
                 }
 
                 ui.setQuantity(ui.getQuantity() + 1);
                 userItemRepo.save(ui);
                 logs.add("🎒 Nhặt được: " + dropName);
-            } else {
-                // logs.add("Thấy " + dropName + " nhưng chưa có trong DB Items");
             }
         } else {
             logs.add("Không tìm thấy gì đặc biệt.");
@@ -117,7 +115,7 @@ public class GameService {
     public Map<String, Object> enhanceItem(Integer userId, Long userItemId) {
         Map<String, Object> result = new HashMap<>();
         UserItem item = userItemRepo.findById(userItemId)
-                .orElseThrow(() -> new RuntimeException("Item ko tồn tại"));
+                .orElseThrow(() -> new RuntimeException("Item không tồn tại"));
 
         if (!item.getUser().getUserId().equals(userId)) throw new RuntimeException("Item không chính chủ");
         if (item.getEnhanceLevel() >= 30) throw new RuntimeException("Đã đạt cấp tối đa (+30)");
@@ -147,7 +145,9 @@ public class GameService {
         // Tăng Main Stat
         if (item.getMainStatValue() == null) item.setMainStatValue(BigDecimal.TEN);
 
-        BigDecimal base = item.getMainStatValue().divide(BigDecimal.valueOf(1.0 + (item.getEnhanceLevel()-1)*0.05), 2, BigDecimal.ROUND_HALF_UP);
+        // Công thức: (Base / factor cũ) * factor mới
+        BigDecimal denominator = BigDecimal.valueOf(1.0 + (item.getEnhanceLevel() - 1) * 0.05);
+        BigDecimal base = item.getMainStatValue().divide(denominator, 2, RoundingMode.HALF_UP);
         BigDecimal newVal = base.multiply(BigDecimal.valueOf(1.0 + item.getEnhanceLevel() * 0.05));
         item.setMainStatValue(newVal);
 
@@ -169,15 +169,17 @@ public class GameService {
     private void handleSubStatRoll(UserItem item, List<String> logs) {
         try {
             List<SubStatDTO> subs = new ArrayList<>();
-            if (item.getSubStats() != null && !item.getSubStats().equals("[]")) {
+            if (item.getSubStats() != null && !item.getSubStats().equals("[]") && !item.getSubStats().isEmpty()) {
                 subs = objectMapper.readValue(item.getSubStats(), new TypeReference<List<SubStatDTO>>() {});
             }
 
             if (subs.size() < 4) {
+                // Thêm dòng mới nếu chưa đủ 4 dòng
                 SubStatDTO newSub = itemGenService.generateRandomSubStat(item, subs);
                 subs.add(newSub);
                 logs.add("✨ Kích hoạt dòng mới: " + newSub.getType());
             } else {
+                // Cường hóa dòng ngẫu nhiên
                 int idx = random.nextInt(subs.size());
                 SubStatDTO target = subs.get(idx);
                 double bonus = getBonusValue(target.getType());
@@ -187,6 +189,7 @@ public class GameService {
             item.setSubStats(objectMapper.writeValueAsString(subs));
         } catch (Exception e) {
             e.printStackTrace();
+            logs.add("Lỗi khi random chỉ số phụ: " + e.getMessage());
         }
     }
 
@@ -197,7 +200,7 @@ public class GameService {
     }
 
     // =========================================================
-    // 3. CÁC CHỨC NĂNG CƠ BẢN (KHÔI PHỤC LOGIC)
+    // 3. CÁC CHỨC NĂNG CƠ BẢN
     // =========================================================
 
     public User getPlayerOrCreate(Integer userId) {
@@ -211,7 +214,7 @@ public class GameService {
     }
 
     private Character getCharacter(Integer userId) {
-        User user = userRepo.findById(userId).orElseThrow();
+        User user = userRepo.findById(userId).orElseThrow(() -> new EntityNotFoundException("User not found"));
         if (user.getCharacter() == null) {
             characterService.createDefaultCharacter(user);
             return charRepo.findByUser_UserId(userId).orElseThrow();
@@ -241,14 +244,15 @@ public class GameService {
 
     public Map<String, Object> equipItem(Integer userId, Long userItemId) {
         Character character = getCharacter(userId);
-        UserItem itemToEquip = userItemRepo.findById(userItemId).orElseThrow();
+        UserItem itemToEquip = userItemRepo.findById(userItemId)
+                .orElseThrow(() -> new EntityNotFoundException("Item không tồn tại"));
         Map<String, Object> result = new HashMap<>();
 
         if (!itemToEquip.getUser().getUserId().equals(userId)) {
             throw new RuntimeException("Vật phẩm không chính chủ");
         }
 
-        // Tháo đồ cũ cùng loại
+        // Tháo đồ cũ cùng loại (nếu có)
         String type = itemToEquip.getItem().getType();
         userItemRepo.findByUser_UserIdAndItem_TypeAndIsEquippedTrue(userId, type)
                 .ifPresent(oldItem -> {
@@ -260,6 +264,7 @@ public class GameService {
         itemToEquip.setIsEquipped(true);
         userItemRepo.save(itemToEquip);
 
+        // Refresh character để trả về data mới nhất (nếu cần stats thay đổi)
         result.put("success", true);
         result.put("character", character);
         return result;
@@ -267,12 +272,15 @@ public class GameService {
 
     public Map<String, Object> unequipItem(Integer userId, Long userItemId) {
         Character character = getCharacter(userId);
-        UserItem item = userItemRepo.findById(userItemId).orElseThrow();
+        UserItem item = userItemRepo.findById(userItemId)
+                .orElseThrow(() -> new EntityNotFoundException("Item không tồn tại"));
         Map<String, Object> result = new HashMap<>();
 
-        if (item.getUser().getUserId().equals(userId) && item.getIsEquipped()) {
+        if (item.getUser().getUserId().equals(userId) && Boolean.TRUE.equals(item.getIsEquipped())) {
             item.setIsEquipped(false);
             userItemRepo.save(item);
+        } else {
+            throw new RuntimeException("Item chưa được trang bị hoặc không chính chủ");
         }
 
         result.put("success", true);

@@ -34,11 +34,15 @@ public class UserService {
     public String changePassword(ChangePasswordRequest request) {
         User user = getCurrentUser();
 
+        // Kiểm tra mật khẩu cũ (so khớp Hash)
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
             throw new RuntimeException("Mật khẩu hiện tại không đúng!");
         }
 
+        // [FIX] Cập nhật cả Hash và Password thường (để không bị lỗi NOT NULL trong DB)
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPassword(request.getNewPassword());
+
         userRepository.save(user);
         return "Đổi mật khẩu thành công!";
     }

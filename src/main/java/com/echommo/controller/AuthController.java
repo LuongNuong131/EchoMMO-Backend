@@ -5,7 +5,7 @@ import com.echommo.dto.AuthResponse;
 import com.echommo.dto.CharacterRequest;
 import com.echommo.entity.User;
 import com.echommo.entity.Wallet;
-import com.echommo.enums.Role; // [FIX] Thêm import này
+import com.echommo.enums.Role;
 import com.echommo.repository.UserRepository;
 import com.echommo.security.JwtUtils;
 import com.echommo.service.CharacterService;
@@ -73,13 +73,17 @@ public class AuthController {
         User user = new User();
         user.setUsername(signUpRequest.getUsername());
         user.setEmail(signUpRequest.getEmail());
+
+        // [FIX QUAN TRỌNG] Set cả hash và password thường để khớp với DB (cột password NOT NULL)
         user.setPasswordHash(encoder.encode(signUpRequest.getPassword()));
+        user.setPassword(signUpRequest.getPassword());
+
         user.setFullName(signUpRequest.getFullName());
         user.setAvatarUrl("🐲");
 
-        // [FIX QUAN TRỌNG] Kích hoạt user và set Role đúng kiểu Enum
+        // Kích hoạt user và set Role
         user.setIsActive(true);
-        user.setRole(Role.USER); // [SỬA LỖI TẠI ĐÂY]
+        user.setRole(Role.USER);
 
         // 2. Tạo Ví
         Wallet wallet = new Wallet();
@@ -91,6 +95,7 @@ public class AuthController {
 
         // 3. AUTO-CREATE CHARACTER
         try {
+            // Tự động đăng nhập để lấy Context cho CharacterService
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(signUpRequest.getUsername(), signUpRequest.getPassword()));
             SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -99,7 +104,8 @@ public class AuthController {
             charReq.setName(signUpRequest.getUsername());
             characterService.createCharacter(charReq);
         } catch (Exception e) {
-            return ResponseEntity.ok("Đăng ký thành công (Lưu ý: " + e.getMessage() + ")");
+            // Nếu tạo nhân vật lỗi thì vẫn báo đăng ký thành công (tránh rollback user đã tạo)
+            return ResponseEntity.ok("Đăng ký thành công (Lưu ý: Không thể tự tạo nhân vật - " + e.getMessage() + ")");
         }
 
         return ResponseEntity.ok("Đăng ký thành công! Đã tạo nhân vật và tặng quà tân thủ.");
