@@ -76,29 +76,49 @@ public class SpaController {
     }
 
     @PostMapping("/use")
-    // Dùng @RequestParam là OK cho 1 tham số.
-    // Nếu nhiều tham số hơn nên chuyển sang @RequestBody SpaRequestDto
     public ResponseEntity<?> useSpaService(@RequestParam String packageType) {
         try {
             User user = getCurrentUser();
-
-            // Gọi Service xử lý logic
             Map<String, Object> result = spaService.processSpaTreatment(user.getUserId(), packageType);
-
             return ResponseEntity.ok(result);
 
         } catch (IllegalArgumentException e) {
-            // Lỗi do input sai (gói không tồn tại, không đủ tiền...) -> Trả về 400
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
                     "message", e.getMessage()
             ));
         } catch (Exception e) {
-            // Lỗi hệ thống không mong muốn -> Nên trả về 500
-            e.printStackTrace(); // Log lỗi ra server console để debug
+            e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of(
                     "success", false,
                     "message", "Lỗi hệ thống: " + e.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<?> getSpaStatus() {
+        try {
+            User user = getCurrentUser();
+            return ResponseEntity.ok(spaService.getSpaStatus(user.getUserId()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/complete")
+    public ResponseEntity<?> completeSpa() {
+        try {
+            User user = getCurrentUser();
+            Map<String, Object> result = spaService.completeSpa(user.getUserId());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
             ));
         }
     }

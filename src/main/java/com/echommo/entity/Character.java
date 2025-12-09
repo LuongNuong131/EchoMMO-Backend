@@ -55,4 +55,13 @@ public class Character {
     private Integer baseCritDmg = 150; // 150%
 
     private String currentLocation = "Làng Tân Thủ";
+
+    @Column(name = "spa_start_time")
+    private java.time.LocalDateTime spaStartTime;
+
+    @Column(name = "spa_end_time")
+    private java.time.LocalDateTime spaEndTime;
+
+    @Column(name = "spa_package_type")
+    private String spaPackageType;
 }

@@ -108,8 +108,10 @@
 
 package com.echommo.service;
 
+import com.echommo.dto.SpaStatusResponse;
 import com.echommo.entity.Character;
 import com.echommo.entity.Wallet;
+import com.echommo.enums.CharacterStatus;
 import com.echommo.enums.SpaPackage;
 import com.echommo.repository.CharacterRepository;
 import com.echommo.repository.WalletRepository;
@@ -117,6 +119,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -127,7 +131,6 @@ public class SpaService {
     private final CharacterRepository charRepo;
     private final WalletRepository walletRepo;
 
-    // [CLEAN CODE] Dùng Constructor Injection thay vì @Autowired trên field
     public SpaService(CharacterRepository charRepo, WalletRepository walletRepo) {
         this.charRepo = charRepo;
         this.walletRepo = walletRepo;
@@ -167,40 +170,116 @@ public class SpaService {
             wallet.setDiamonds(wallet.getDiamonds() - diamondCost);
         }
 
-        // Lưu ví tiền
         walletRepo.save(wallet);
 
-        // 4. Tính toán hồi phục
-        // Logic này khớp với Entity Character dùng @Data (getCurrentHp)
+        int maxHp = character.getMaxHp();
+        int maxEnergy = character.getMaxEnergy();
+        int currentHp = character.getCurrentHp();
+        int currentEnergy = character.getCurrentEnergy();
+
+        int hpToRecover = maxHp - currentHp;
+        int energyToRecover = maxEnergy - currentEnergy;
+
+        double hpPercent = maxHp > 0 ? (double) hpToRecover / maxHp : 0;
+        double energyPercent = maxEnergy > 0 ? (double) energyToRecover / maxEnergy : 0;
+        double avgPercent = (hpPercent + energyPercent) / 2.0;
+
+        int durationSeconds = (int) Math.min(Math.ceil(avgPercent * 300), 300);
+        durationSeconds = Math.max(durationSeconds, 10);
+
+        LocalDateTime startTime = LocalDateTime.now();
+        LocalDateTime endTime = startTime.plusSeconds(durationSeconds);
+
+        character.setStatus(CharacterStatus.RESTING);
+        character.setSpaStartTime(startTime);
+        character.setSpaEndTime(endTime);
+        character.setSpaPackageType(packageType.toUpperCase());
+
+        charRepo.save(character);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "Bắt đầu thư giãn tại " + spaPackage.getName() + "!");
+        result.put("durationSeconds", durationSeconds);
+        result.put("endTime", endTime.toString());
+        result.put("goldRemaining", wallet.getGold());
+        result.put("diamondsRemaining", wallet.getDiamonds());
+
+        return result;
+    }
+
+    public SpaStatusResponse getSpaStatus(Integer userId) {
+        Character character = charRepo.findByUser_UserIdWithUserAndWallet(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy nhân vật!"));
+
+        SpaStatusResponse response = new SpaStatusResponse();
+        response.setCurrentHp(character.getCurrentHp());
+        response.setMaxHp(character.getMaxHp());
+        response.setCurrentEnergy(character.getCurrentEnergy());
+        response.setMaxEnergy(character.getMaxEnergy());
+
+        if (character.getStatus() == CharacterStatus.RESTING && character.getSpaEndTime() != null) {
+            LocalDateTime now = LocalDateTime.now();
+            long secondsRemaining = ChronoUnit.SECONDS.between(now, character.getSpaEndTime());
+
+            if (secondsRemaining > 0) {
+                response.setResting(true);
+                response.setPackageType(character.getSpaPackageType());
+                response.setSecondsRemaining(secondsRemaining);
+                response.setMessage("Đang nghỉ ngơi... còn " + secondsRemaining + " giây");
+            } else {
+                response.setResting(false);
+                response.setMessage("Nghỉ xong rồi! Hãy gọi /complete để hoàn thành.");
+            }
+        } else {
+            response.setResting(false);
+            response.setMessage("Không trong trạng thái nghỉ ngơi");
+        }
+
+        return response;
+    }
+
+    public Map<String, Object> completeSpa(Integer userId) {
+        Character character = charRepo.findByUser_UserIdWithUserAndWallet(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy nhân vật!"));
+
+        if (character.getStatus() != CharacterStatus.RESTING || character.getSpaEndTime() == null) {
+            throw new RuntimeException("Bạn không đang trong trạng thái nghỉ ngơi!");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(character.getSpaEndTime())) {
+            long secondsRemaining = ChronoUnit.SECONDS.between(now, character.getSpaEndTime());
+            throw new RuntimeException("Chưa đến giờ! Còn " + secondsRemaining + " giây nữa.");
+        }
+
+        SpaPackage spaPackage = SpaPackage.valueOf(character.getSpaPackageType());
+
         int maxHp = character.getMaxHp();
         int maxEnergy = character.getMaxEnergy();
 
         int healAmount = (int) (maxHp * spaPackage.getRecoveryRate());
         int energyAmount = (int) (maxEnergy * spaPackage.getRecoveryRate());
 
-        int currentHp = character.getCurrentHp();
-        int currentEnergy = character.getCurrentEnergy();
-
-        // Cộng dồn và đảm bảo không vượt quá Max
-        int newHp = Math.min(maxHp, currentHp + healAmount);
-        int newEnergy = Math.min(maxEnergy, currentEnergy + energyAmount);
+        int newHp = Math.min(maxHp, character.getCurrentHp() + healAmount);
+        int newEnergy = Math.min(maxEnergy, character.getCurrentEnergy() + energyAmount);
 
         character.setCurrentHp(newHp);
         character.setCurrentEnergy(newEnergy);
+        character.setStatus(CharacterStatus.IDLE);
+        character.setSpaStartTime(null);
+        character.setSpaEndTime(null);
+        character.setSpaPackageType(null);
 
-        // 5. Lưu Character
         charRepo.save(character);
 
-        // 6. Trả kết quả về Controller
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
-        result.put("message", "Sử dụng " + spaPackage.getName() + " thành công!");
+        result.put("message", "Nghỉ ngơi hoàn tất!");
         result.put("hpRecovered", healAmount);
         result.put("energyRecovered", energyAmount);
         result.put("currentHp", newHp);
         result.put("currentEnergy", newEnergy);
-        result.put("goldRemaining", wallet.getGold());
-        // Nếu muốn trả về số dư KC: result.put("diamondsRemaining", wallet.getDiamonds());
 
         return result;
     }
