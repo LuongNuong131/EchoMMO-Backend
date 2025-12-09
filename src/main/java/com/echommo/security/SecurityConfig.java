@@ -36,8 +36,8 @@ public class SecurityConfig {
                         // 1. Cho phép Auth và Public
                         .requestMatchers("/api/auth/**", "/api/public/**").permitAll()
 
-                        // 2. [FIX QUAN TRỌNG] Cho phép các API Game/Item cho người dùng đã xác thực (Authenticated)
-                        .requestMatchers("/api/game/**", "/api/items/**").authenticated()
+                        // 2. [FIX] Cho phép các API Game/Item cho người dùng có quyền USER hoặc ADMIN
+                        .requestMatchers("/api/game/**", "/api/items/**").hasAnyAuthority("USER", "ADMIN")
 
                         // 3. Bảo vệ trang Admin
                         .requestMatchers("/api/admin/**").hasAnyAuthority("ADMIN")

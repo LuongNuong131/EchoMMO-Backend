@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ public class GameService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Random random = new Random();
-    private static final BigDecimal REST_COST = new BigDecimal("50");
+    // [LƯU Ý]: Hằng số REST_COST và REST_COOLDOWN_SECONDS đã được loại bỏ
 
     // --- HELPER METHODS: CURRENT USER (FIXED LOGIC) ---
     private User getCurrentUser() {
@@ -120,32 +121,27 @@ public class GameService {
 
     // =========================================================
     // 2. CÁC CHỨC NĂNG CƠ BẢN
+    // [LƯU Ý]: Phương thức restAtInn đã được loại bỏ
     // =========================================================
-
-    public User restAtInn(Integer userId) {
-        Character character = getCharacter(userId);
-        Wallet wallet = character.getUser().getWallet();
-
-        if (wallet.getGold().compareTo(REST_COST) < 0) {
-            throw new RuntimeException("Không đủ 50 vàng để nghỉ trọ!");
-        }
-
-        wallet.setGold(wallet.getGold().subtract(REST_COST));
-        walletRepo.save(wallet);
-
-        character.setCurrentHp(character.getMaxHp());
-        character.setCurrentEnergy(character.getMaxEnergy());
-        return charRepo.save(character).getUser();
-    }
 
     // --- HELPER METHODS ---
     private Character getCharacter(Integer userId) {
+        // FIX: Sử dụng phương thức JOIN FETCH để tối ưu DB call
+        Optional<Character> optionalCharacter = charRepo.findByUser_UserIdWithUserAndWallet(userId);
+
+        if (optionalCharacter.isPresent()) {
+            return optionalCharacter.get();
+        }
+
+        // Nếu không tìm thấy, quay lại logic gốc: Fetch User và tạo Character nếu cần
         User user = userRepo.findById(userId).orElseThrow(() -> new EntityNotFoundException("User not found"));
         if (user.getCharacter() == null) {
             characterService.createDefaultCharacter(user);
-            return charRepo.findByUser_UserId(userId).orElseThrow();
+            // Fetch lại bằng query tối ưu sau khi tạo
+            return charRepo.findByUser_UserIdWithUserAndWallet(userId).orElseThrow();
         }
-        return user.getCharacter();
+
+        throw new EntityNotFoundException("Character not found for User: " + userId);
     }
 
     public List<UserItem> getInventory(Integer userId) {
