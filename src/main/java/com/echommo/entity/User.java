@@ -1,13 +1,18 @@
 package com.echommo.entity;
 
 import com.echommo.enums.Role;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
 import java.time.LocalDateTime;
 
-@Data
 @Entity
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Table(name = "users")
 public class User {
     @Id
@@ -15,14 +20,16 @@ public class User {
     @Column(name = "user_id")
     private Integer userId;
 
-    @Column(unique = true, nullable = false)
+    @Column(nullable = false, unique = true)
     private String username;
 
     @Column(name = "password_hash", nullable = false)
-    @JsonIgnore
+    @JsonIgnoreProperties
     private String passwordHash;
 
-    @Column(unique = true, nullable = false)
+    private String password;
+
+    @Column(nullable = false, unique = true)
     private String email;
 
     @Column(name = "full_name")
@@ -31,46 +38,33 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Role role = Role.USER;
 
-    @Column(name = "is_active")
-    private Boolean isActive = true;
-
-    // --- BAN INFO ---
-    @Column(name = "ban_reason")
-    private String banReason;
-
-    @Column(name = "banned_at")
-    private LocalDateTime bannedAt;
-
-    // --- CAPTCHA FIELDS ---
-    @Column(name = "is_captcha_locked")
-    private Boolean isCaptchaLocked = false;
-
-    @Column(name = "captcha_fail_count")
-    private Integer captchaFailCount = 0;
-
-    @Column(name = "captcha_locked_until")
-    private LocalDateTime captchaLockedUntil;
-
-    // --- OTP FIELDS ---
-    @Column(name = "otp_code")
-    private String otpCode;
-
-    @Column(name = "otp_expiry")
-    private LocalDateTime otpExpiry;
-
-    @Column(name = "avatar_url")
-    private String avatarUrl = "🐲";
-
-    @Column(name = "last_login")
-    private LocalDateTime lastLogin;
-
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    // [FIX QUAN TRỌNG] Thêm fetch = FetchType.EAGER để luôn load ví khi query user
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    // [GIỮ NGUYÊN] Quan hệ với Wallet
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Wallet wallet;
 
+    // [FIX MỚI] Thêm quan hệ với Character để GameService gọi được user.getCharacter()
+    // Lưu ý: Logic game này đang giả định 1 User chỉ có 1 Character chính
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Character character;
+
+    private Boolean isActive = true;
+    private String banReason;
+    private LocalDateTime bannedAt;
+
+    private Boolean isCaptchaLocked = false;
+    private Integer captchaFailCount = 0;
+    private LocalDateTime captchaLockedUntil;
+
+    private String otpCode;
+    private LocalDateTime otpExpiry;
+
+    private String avatarUrl = "🐲";
+
+    private LocalDateTime lastLogin;
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    public void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
 }

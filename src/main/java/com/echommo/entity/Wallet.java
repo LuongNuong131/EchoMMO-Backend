@@ -3,11 +3,12 @@ package com.echommo.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Data
 @Entity
+@Data
 @Table(name = "wallet")
 public class Wallet {
     @Id
@@ -15,19 +16,30 @@ public class Wallet {
     @Column(name = "wallet_id")
     private Integer walletId;
 
-    @OneToOne
-    @JoinColumn(name = "user_id", unique = true, nullable = false)
+    // [FIX] Thêm @JsonIgnore để ngắt vòng lặp vô tận
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", referencedColumnName = "user_id")
     @JsonIgnore
     private User user;
 
-    private BigDecimal gold = BigDecimal.valueOf(100);
-    private Integer diamonds = 0;
+    @Column(columnDefinition = "DECIMAL(18,2) DEFAULT 100.00")
+    private BigDecimal gold;
 
-    // Tài nguyên
-    private Integer wood = 0;
-    private Integer stone = 0;
-    // private Integer fossilWood = 0; // Nếu m muốn thêm Gỗ hóa thạch
+    @Column(columnDefinition = "INT DEFAULT 0")
+    private Integer diamonds;
+
+    @Column(columnDefinition = "INT DEFAULT 0")
+    private Integer wood;
+
+    @Column(columnDefinition = "INT DEFAULT 0")
+    private Integer stone;
 
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    public void updateTimestamp() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }
