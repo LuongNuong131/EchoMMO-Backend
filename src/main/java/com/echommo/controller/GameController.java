@@ -78,11 +78,12 @@
 //}
 package com.echommo.controller;
 
-import com.echommo.service.GameService;
-import com.echommo.service.EquipmentService;
-import com.echommo.entity.UserItem;
 import com.echommo.entity.User;
+import com.echommo.entity.UserItem;
 import com.echommo.repository.UserRepository;
+import com.echommo.service.CharacterService;
+import com.echommo.service.EquipmentService;
+import com.echommo.service.GameService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -102,45 +103,63 @@ public class GameController {
     @Autowired
     private EquipmentService equipmentService;
 
+    // [QUAN TRỌNG] Inject CharacterService để tạo nhân vật mặc định
+    @Autowired
+    private CharacterService characterService;
+
     @Autowired
     private UserRepository userRepo;
 
-    // --- HÀM HELPER: Lấy User hiện tại từ Token ---
+    // Helper: Lấy User hiện tại từ Token
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepo.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Lỗi: Không tìm thấy User (Token không hợp lệ)."));
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    // ==========================================
-    // 1. CHỨC NĂNG CỐT LÕI (CORE GAME)
-    // ==========================================
+    // ========================================================
+    // 1. API LẤY THÔNG TIN NHÂN VẬT (Khắc phục lỗi Frontend)
+    // ========================================================
+    @GetMapping("/character")
+    public ResponseEntity<?> getMyCharacterInfo() {
+        try {
+            User user = getCurrentUser();
+
+            // Nếu User chưa có nhân vật -> Tạo mới luôn và trả về
+            if (user.getCharacter() == null) {
+                return ResponseEntity.ok(characterService.createDefaultCharacter(user));
+            }
+
+            // Nếu đã có -> Trả về nhân vật
+            return ResponseEntity.ok(user.getCharacter());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("message", "Lỗi Server: " + e.getMessage()));
+        }
+    }
+
+    // ========================================================
+    // 2. CÁC API GAMEPLAY KHÁC
+    // ========================================================
 
     @PostMapping("/explore")
     public ResponseEntity<Map<String, Object>> explore() {
         try {
-            User user = getCurrentUser();
-            return ResponseEntity.ok(gameService.explore(user.getUserId()));
+            return ResponseEntity.ok(gameService.explore(getCurrentUser().getUserId()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ==========================================
-    // 2. QUẢN LÝ TÚI ĐỒ (INVENTORY & EQUIP)
-    // ==========================================
-
     @GetMapping("/inventory")
     public ResponseEntity<List<UserItem>> getInventory() {
-        User user = getCurrentUser();
-        return ResponseEntity.ok(gameService.getInventory(user.getUserId()));
+        return ResponseEntity.ok(gameService.getInventory(getCurrentUser().getUserId()));
     }
 
     @PostMapping("/item/equip/{itemId}")
     public ResponseEntity<Map<String, Object>> equipItem(@PathVariable("itemId") Long userItemId) {
         try {
-            User user = getCurrentUser();
-            return ResponseEntity.ok(gameService.equipItem(user.getUserId(), userItemId));
+            return ResponseEntity.ok(gameService.equipItem(getCurrentUser().getUserId(), userItemId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -149,29 +168,19 @@ public class GameController {
     @PostMapping("/item/unequip/{itemId}")
     public ResponseEntity<Map<String, Object>> unequipItem(@PathVariable("itemId") Long userItemId) {
         try {
-            User user = getCurrentUser();
-            return ResponseEntity.ok(gameService.unequipItem(user.getUserId(), userItemId));
+            return ResponseEntity.ok(gameService.unequipItem(getCurrentUser().getUserId(), userItemId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ==========================================
-    // 3. CƯỜNG HÓA (ENHANCEMENT)
-    // ==========================================
-
     @PostMapping("/item/enhance/{itemId}")
     public ResponseEntity<?> enhanceItem(@PathVariable("itemId") Long userItemId) {
         try {
-            User user = getCurrentUser();
-            // Truyền userId vào để đảm bảo item thuộc về user đó
-            UserItem updatedItem = equipmentService.upgradeItem(userItemId, user.getUserId());
+            UserItem updatedItem = equipmentService.upgradeItem(userItemId, getCurrentUser().getUserId());
             return ResponseEntity.ok(updatedItem);
-
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("message", "Lỗi hệ thống: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 }
